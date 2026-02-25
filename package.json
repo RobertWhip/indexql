@@ -1,0 +1,37 @@
+{
+  "name": "indexql-mvp",
+  "version": "1.0.0",
+  "description": "Schema-Driven Catalog Indexing for Node.js – static artifact delivery with GraphQL-like query interface",
+  "main": "dist/index.js",
+  "scripts": {
+    "build:ts": "tsc",
+    "seed": "npx ts-node data/seed.ts",
+    "build": "npx ts-node src/cli/build.ts",
+    "inspect": "npx ts-node src/cli/inspect.ts",
+    "demo:indexql": "npx ts-node src/demo/indexqlDemo.ts",
+    "demo:http": "npx ts-node src/demo/httpDemo.ts",
+    "demo:compare": "npm run demo:indexql && npm run demo:http",
+    "demo": "npm run demo:compare",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "setup-db": "npx ts-node src/demo/setupDb.ts",
+    "setup-db-5m": "npx ts-node src/demo/setupDb.ts --count 5000000",
+    "setup-redis": "npx ts-node src/demo/setupRedis.ts",
+    "start-redis-server": "npx ts-node src/demo/redisServer.ts",
+    "test": "npx ts-node tests/runner.ts"
+  },
+  "dependencies": {
+    "@types/ioredis": "^5.0.0",
+    "ioredis": "^5.9.3",
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "@types/pg": "^8.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,13 @@
+# IndexQL Schema v2
+@collection(products)
+type Product {
+  id:          String
+  name:        String
+  price:       Float32   @facet(RANGE)
+  category:    String    @facet(TERMS)
+  brand:       String    @facet(TERMS)
+  rating:      Float32   @facet(RANGE)
+  inStock:     Bool
+  tags:        String[]
+  description: String
+}

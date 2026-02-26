@@ -1,16 +1,3 @@
-/**
- * src/cli/build.ts
- * IndexQL artifact build pipeline (v2 – binary format).
- *
- * Usage: npx ts-node src/cli/build.ts [--products <path>] [--out <dir>]
- *
- * Outputs:
- *   artifacts/products.bin  – column-major binary (numeric/bool fields)
- *   artifacts/strings.json  – parallel string arrays
- *   artifacts/facets.json   – pre-computed facets (plain JSON)
- *   artifacts/manifest.json – hashes, sizes, counts
- */
-
 import * as fs   from 'fs';
 import * as path from 'path';
 import { parseIQSchema, binaryFields, stringFields, toSchemaNode } from '../../schema/iq-parser';
@@ -86,7 +73,7 @@ async function build(): Promise<void> {
   log.info('Building strings index…');
   const stringsObj: Record<string, unknown[]> = {};
   for (const f of strCols) {
-    stringsObj[f.name] = products.map(p => (p as unknown as Record<string, unknown>)[f.name]);
+    stringsObj[f.name] = products.map(p => p[f.name]);
   }
 
   // ── 6. Write ───────────────────────────────────────────────────────────────

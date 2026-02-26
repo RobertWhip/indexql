@@ -1,8 +1,3 @@
-/**
- * tests/core.test.ts
- * Unit tests for core abstractions: binary-encoder, IQ parser, normalizer, facet.
- */
-
 import { encodeColumns, decodeColumns, reconstructProducts, ColumnMeta } from '../src/core/binary-encoder';
 import { parseIQSchema, binaryFields, stringFields, productStride }       from '../schema/iq-parser';
 import { normalizeRecord, normalizeAll }                                   from '../src/core/normalizer';
@@ -235,7 +230,7 @@ run('Parser: enum extraction', () => {
 run('Normalizer: passes through valid product', () => {
   const schema = parseSchema(MINI_SDL);
   const node   = getNode(schema, 'products');
-  const p      = normalizeRecord(SAMPLE_PRODUCTS[0] as unknown as Record<string, unknown>, node);
+  const p      = normalizeRecord(SAMPLE_PRODUCTS[0] as Record<string, unknown>, node);
   assertEq(p.id,       'p1',           'id preserved');
   assertEq(p.price,    299,            'price preserved');
   assertEq(p.inStock,  true,           'inStock preserved');
@@ -273,7 +268,7 @@ run('Normalizer: normalizeAll filters empty ids', () => {
   const schema = parseSchema(MINI_SDL);
   const node   = getNode(schema, 'products');
   const raws   = [
-    ...(SAMPLE_PRODUCTS as unknown as Record<string, unknown>[]),
+    ...(SAMPLE_PRODUCTS as Record<string, unknown>[]),
     { name: 'No ID product' },
   ];
   const out = normalizeAll(raws, node);

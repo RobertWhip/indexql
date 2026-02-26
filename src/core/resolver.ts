@@ -1,9 +1,3 @@
-/**
- * src/core/resolver.ts
- * Maps schema nodes to their backing data collections.
- * Acts as the data-access layer between parsed schema and raw JSON.
- */
-
 import { ParsedSchema, SchemaNode, Product } from './types';
 import { getNode } from '../../schema/parser';
 

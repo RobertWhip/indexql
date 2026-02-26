@@ -1,8 +1,3 @@
-/**
- * tests/cli.test.ts
- * Integration tests for CLI utilities and the build pipeline (v2 binary format).
- */
-
 import * as fs   from 'fs';
 import * as path from 'path';
 import * as os   from 'os';
@@ -122,7 +117,7 @@ run('Pipeline: strings.json written and parsed back correctly', () => {
     const strFields = ['id', 'name', 'category', 'brand', 'description', 'tags'];
     const stringsObj: Record<string, unknown[]> = {};
     for (const field of strFields) {
-      stringsObj[field] = products.map(p => (p as unknown as Record<string, unknown>)[field]);
+      stringsObj[field] = products.map(p => p[field]);
     }
 
     const stringsPath = path.join(tmpDir, 'strings.json');

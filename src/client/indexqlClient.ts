@@ -1,18 +1,6 @@
-/**
- * src/client/indexqlClient.ts
- * IndexQL Client SDK (v2 – binary artifact format).
- *
- * Loads products.bin + strings.json + facets.json once, then exposes a
- * GraphQL-like query interface for fully local, zero-latency filtering.
- *
- * Usage:
- *   const client = IndexQLClient.load();
- *   const result = client.queryProducts({ filter: { category: 'Electronics' } });
- */
-
 import * as fs   from 'fs';
 import * as path from 'path';
-import { parseIQSchema, toSchemaNode } from '../../schema/iq-parser';
+import { parseIQSchema, toSchemaNode, IQSchema } from '../../schema/iq-parser';
 import { reconstructProducts }         from '../core/binary-encoder';
 import { Product, FacetData, Manifest, QueryOptions, QueryResult } from '../core/types';
 import { executeQuery }                from './query';
@@ -44,7 +32,7 @@ export class IndexQLClient {
   private products!:  Product[];
   private facetData!: FacetData;
   private manifest!:  Manifest;
-  private schema!:    ReturnType<typeof parseIQSchema>;
+  private schema!:    IQSchema;
   private readonly artifactsDir: string;
   private readonly schemaFile:   string;
   private stats!:     ClientStats;
@@ -73,7 +61,7 @@ export class IndexQLClient {
     const productsPath = path.join(this.artifactsDir, this.manifest.files.products.name);
     const stringsPath  = path.join(this.artifactsDir, this.manifest.files.strings.name);
     const productsBuf  = fs.readFileSync(productsPath);
-    const strings      = JSON.parse(fs.readFileSync(stringsPath, 'utf8')) as Record<string, string[] | string[][]>;
+    const strings: Record<string, string[] | string[][]> = JSON.parse(fs.readFileSync(stringsPath, 'utf8'));
     this.products      = reconstructProducts(productsBuf, strings);
 
     // 3. Load facets

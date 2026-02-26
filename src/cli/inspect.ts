@@ -1,14 +1,7 @@
-/**
- * src/cli/inspect.ts
- * Inspect IndexQL v2 artifacts: manifest, column layout, facets, sample products.
- *
- * Usage: npx ts-node src/cli/inspect.ts [--artifacts <dir>]
- */
-
 import * as fs   from 'fs';
 import * as path from 'path';
 import { decodeColumns, reconstructProducts } from '../core/binary-encoder';
-import { Product, FacetData, Manifest, TermsFacet, RangeFacet } from '../core/types';
+import { FacetData, Manifest } from '../core/types';
 import { readJson, fileExists, log, fmtBytes } from './utils';
 
 const ROOT          = path.resolve(__dirname, '..', '..');
@@ -84,15 +77,13 @@ function inspect(): void {
 
     for (const facet of facetData.facets) {
       if (facet.type === 'TERMS') {
-        const tf = facet as TermsFacet;
-        console.log(`\n  [TERMS] ${tf.field}  (${tf.buckets.length} values, ${tf.total} items)`);
-        tf.buckets.slice(0, 8).forEach(b =>
+        console.log(`\n  [TERMS] ${facet.field}  (${facet.buckets.length} values, ${facet.total} items)`);
+        facet.buckets.slice(0, 8).forEach(b =>
           console.log(`    ${b.value.padEnd(28)} ${String(b.count).padStart(4)}`));
-        if (tf.buckets.length > 8) console.log(`    … +${tf.buckets.length - 8} more`);
+        if (facet.buckets.length > 8) console.log(`    … +${facet.buckets.length - 8} more`);
       } else {
-        const rf = facet as RangeFacet;
-        console.log(`\n  [RANGE] ${rf.field}  (min: ${rf.min}, max: ${rf.max})`);
-        rf.buckets.forEach(b =>
+        console.log(`\n  [RANGE] ${facet.field}  (min: ${facet.min}, max: ${facet.max})`);
+        facet.buckets.forEach(b =>
           console.log(`    ${b.label.padEnd(20)} ${String(b.count).padStart(4)} items`));
       }
     }

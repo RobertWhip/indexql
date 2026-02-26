@@ -1,13 +1,3 @@
-/**
- * src/demo/redisServer.ts
- * Lightweight HTTP proxy for Redis product lookups.
- *
- * POST /products/batch  { ids: string[] } → Product[]
- * GET  /health          → 200 OK
- *
- * Usage: npx ts-node src/demo/redisServer.ts
- */
-
 import * as http from 'http';
 import Redis     from 'ioredis';
 

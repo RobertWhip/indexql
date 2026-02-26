@@ -1,41 +1,8 @@
-/**
- * src/demo/indexqlDemo.ts
- * Demonstrates the IndexQL static-artifact approach over a 15,000-product catalog.
- *
- * Measures:
- *  - Client initialization (artifact load + decode into memory)
- *  - Four representative queries; Query D also does a Redis HTTP batch fetch.
- */
-
 import * as http            from 'http';
-import * as path            from 'path';
 import { IndexQLClient }    from '../client/indexqlClient';
 import { now }              from '../client/utils';
 import { TermsFacet, Product } from '../core/types';
-
-// ── Formatting ────────────────────────────────────────────────────────────────
-
-const RESET  = '\x1b[0m';
-const BOLD   = '\x1b[1m';
-const GREEN  = '\x1b[32m';
-const CYAN   = '\x1b[36m';
-const YELLOW = '\x1b[33m';
-const DIM    = '\x1b[2m';
-
-const b = (s: string) => `${BOLD}${s}${RESET}`;
-const c = (s: string) => `${CYAN}${s}${RESET}`;
-const g = (s: string) => `${GREEN}${s}${RESET}`;
-const y = (s: string) => `${YELLOW}${s}${RESET}`;
-const d = (s: string) => `${DIM}${s}${RESET}`;
-
-function hr(label: string): void {
-  const pad = '─'.repeat(Math.max(0, 58 - label.length));
-  console.log(`\n${b(`── ${label} ${pad}`)}`);
-}
-
-function row(label: string, value: string): void {
-  console.log(`  ${label.padEnd(26)} ${value}`);
-}
+import { bold, cyan, green, yellow, dim, hr, row } from '../fmt';
 
 /** Run a query fn 3× and return the warm average (last 2 runs). */
 function warmAvg(fn: () => number): number {
@@ -82,9 +49,9 @@ function batchFetchFromRedis(ids: string[]): Promise<Product[]> {
 
 async function run(): Promise<void> {
   console.log();
-  console.log(b('╔══════════════════════════════════════════════════════════╗'));
-  console.log(b('║     IndexQL – Static Artifact Demo (15,000 products)   ║'));
-  console.log(b('╚══════════════════════════════════════════════════════════╝'));
+  console.log(bold('╔══════════════════════════════════════════════════════════╗'));
+  console.log(bold('║     IndexQL – Static Artifact Demo (15,000 products)   ║'));
+  console.log(bold('╚══════════════════════════════════════════════════════════╝'));
 
   // ── Init ──────────────────────────────────────────────────────────────────
   hr('1. Client Initialization');
@@ -96,13 +63,13 @@ async function run(): Promise<void> {
   const manifest    = client.getManifest();
   const formatKB    = (n: number) => `${(n / 1024).toFixed(1)} KB`;
 
-  row('Load time',          g(`${initMs.toFixed(2)} ms`));
+  row('Load time',          green(`${initMs.toFixed(2)} ms`));
   row('Products',           String(stats.productCount));
   row('Facets',             String(stats.facetCount));
-  row('products.bin',       d(`${formatKB(manifest.files.products.sizeBytes)}`));
-  row('strings.json',       d(`${formatKB(manifest.files.strings.sizeBytes)}`));
-  row('facets.json',        d(`${formatKB(manifest.files.facets.sizeBytes)}`));
-  row('Artifacts dir',      d(stats.artifactsDir));
+  row('products.bin',       dim(`${formatKB(manifest.files.products.sizeBytes)}`));
+  row('strings.json',       dim(`${formatKB(manifest.files.strings.sizeBytes)}`));
+  row('facets.json',        dim(`${formatKB(manifest.files.facets.sizeBytes)}`));
+  row('Artifacts dir',      dim(stats.artifactsDir));
 
   // ── Query A: Electronics ≤ $500, in stock, top-10 by rating ─────────────
   hr('2. Query A – Electronics ≤ $500, in stock, sort rating↓');
@@ -126,10 +93,10 @@ async function run(): Promise<void> {
   });
 
   row('Matching',    `${rA.meta.total} products`);
-  row('Warm avg',    g(`${avgA.toFixed(3)} ms`));
+  row('Warm avg',    green(`${avgA.toFixed(3)} ms`));
   console.log();
   rA.data.slice(0, 5).forEach((p, i) =>
-    console.log(`  ${i + 1}. ${c(p.name!)} – $${p.price}  ★${p.rating}  ${p.brand}`)
+    console.log(`  ${i + 1}. ${cyan(p.name!)} – $${p.price}  ★${p.rating}  ${p.brand}`)
   );
 
   // ── Query B: full-text search "blender", $100–$600, sort price asc ───────
@@ -150,10 +117,10 @@ async function run(): Promise<void> {
   });
 
   row('Matching',  `${rB.meta.total} products`);
-  row('Warm avg',  g(`${avgB.toFixed(3)} ms`));
+  row('Warm avg',  green(`${avgB.toFixed(3)} ms`));
   console.log();
   rB.data.slice(0, 5).forEach((p, i) =>
-    console.log(`  ${i + 1}. ${c(p.name!)} – $${p.price}  (${p.brand})  ★${p.rating}`)
+    console.log(`  ${i + 1}. ${cyan(p.name!)} – $${p.price}  (${p.brand})  ★${p.rating}`)
   );
 
   // ── Query C: Clothing, Nike|Adidas, with facets ──────────────────────────
@@ -174,7 +141,7 @@ async function run(): Promise<void> {
   });
 
   row('Matching',  `${rC.meta.total} products`);
-  row('Warm avg',  g(`${avgC.toFixed(3)} ms`));
+  row('Warm avg',  green(`${avgC.toFixed(3)} ms`));
 
   const brandFacet = rC.facets?.find(f => f.field === 'brand') as TermsFacet | undefined;
   if (brandFacet) {
@@ -197,7 +164,7 @@ async function run(): Promise<void> {
 
   row('Local filter (Elec ≤ $500, in stock)', '');
   row('  Matching IDs', String(matchIds.length));
-  row('  Filter time',  g(`${filterMs.toFixed(2)} ms`));
+  row('  Filter time',  green(`${filterMs.toFixed(2)} ms`));
 
   // HTTP batch fetch from Redis
   let httpMs = 0;
@@ -208,33 +175,33 @@ async function run(): Promise<void> {
     httpMs         = now() - t0H;
 
     console.log();
-    row('  POST /products/batch', d(`{ ids: [${matchIds.length} IDs] }`));
-    row('  HTTP + Redis time',    g(`${httpMs.toFixed(2)} ms`));
-    row('  Total (filter+fetch)', g(`${(filterMs + httpMs).toFixed(2)} ms`));
+    row('  POST /products/batch', dim(`{ ids: [${matchIds.length} IDs] }`));
+    row('  HTTP + Redis time',    green(`${httpMs.toFixed(2)} ms`));
+    row('  Total (filter+fetch)', green(`${(filterMs + httpMs).toFixed(2)} ms`));
     row('  Products returned',    String(redisPr.length));
     console.log();
-    console.log(d('  (IndexQL does filtering; Redis delivers full records in one round-trip)'));
+    console.log(dim('  (IndexQL does filtering; Redis delivers full records in one round-trip)'));
   } catch {
     redisSkipped = true;
-    console.log(d('\n  (Redis server not reachable – skipping HTTP fetch)'));
-    console.log(d('  Start with: npm run start-redis-server'));
+    console.log(dim('\n  (Redis server not reachable – skipping HTTP fetch)'));
+    console.log(dim('  Start with: npm run start-redis-server'));
   }
 
   // ── Timing Summary ────────────────────────────────────────────────────────
   hr('6. Timing Summary');
   const totalQueryMs = avgA + avgB + avgC;
-  row('Init (load + decode)', y(`${initMs.toFixed(2)} ms`));
-  row('Query A (warm avg)',   g(`${avgA.toFixed(3)} ms`));
-  row('Query B (warm avg)',   g(`${avgB.toFixed(3)} ms`));
-  row('Query C (warm avg)',   g(`${avgC.toFixed(3)} ms`));
-  row('Total A+B+C',          g(`${totalQueryMs.toFixed(3)} ms`));
-  row('Query D filter',       g(`${filterMs.toFixed(2)} ms`));
+  row('Init (load + decode)', yellow(`${initMs.toFixed(2)} ms`));
+  row('Query A (warm avg)',   green(`${avgA.toFixed(3)} ms`));
+  row('Query B (warm avg)',   green(`${avgB.toFixed(3)} ms`));
+  row('Query C (warm avg)',   green(`${avgC.toFixed(3)} ms`));
+  row('Total A+B+C',          green(`${totalQueryMs.toFixed(3)} ms`));
+  row('Query D filter',       green(`${filterMs.toFixed(2)} ms`));
   if (!redisSkipped && httpMs > 0) {
-    row('Query D HTTP+Redis',   g(`${httpMs.toFixed(2)} ms`));
+    row('Query D HTTP+Redis',   green(`${httpMs.toFixed(2)} ms`));
   }
   console.log();
-  console.log(d('  All queries executed locally — zero network latency.'));
-  console.log(d('  Init cost is one-time; subsequent queries reuse in-memory data.'));
+  console.log(dim('  All queries executed locally — zero network latency.'));
+  console.log(dim('  Init cost is one-time; subsequent queries reuse in-memory data.'));
   console.log();
 }
 

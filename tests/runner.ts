@@ -1,10 +1,4 @@
-/**
- * tests/runner.ts
- * Minimal zero-dependency test runner.
- * Collected via a simple module-level registry; tests run sequentially.
- *
- * Usage: npx ts-node tests/runner.ts
- */
+import { RESET, BOLD, DIM, RED, GREEN, YELLOW, CYAN } from '../src/fmt';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -40,14 +34,6 @@ export function assertThrows(fn: () => unknown, message = 'Expected function to 
 }
 
 // ── Runner ────────────────────────────────────────────────────────────────────
-
-const RESET  = '\x1b[0m';
-const BOLD   = '\x1b[1m';
-const GREEN  = '\x1b[32m';
-const RED    = '\x1b[31m';
-const YELLOW = '\x1b[33m';
-const DIM    = '\x1b[2m';
-const CYAN   = '\x1b[36m';
 
 async function runAll(): Promise<void> {
   // Import test files to populate the registry

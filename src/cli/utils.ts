@@ -1,17 +1,15 @@
-/**
- * src/cli/utils.ts
- * Shared CLI helpers: hashing, file I/O, logging.
- */
-
 import * as fs   from 'fs';
 import * as path from 'path';
 import { ArtifactFile } from '../core/types';
+
+// Re-export formatting utilities so existing consumers don't break
+export { log, fmtBytes, fmtMs } from '../fmt';
 
 // ── Hashing ───────────────────────────────────────────────────────────────────
 
 /**
  * Compute a deterministic 64-bit hex hash of a string.
- * Uses two independent XOR passes for a 64-bit result.
+ * Uses two independent FNV-1a passes for a 64-bit result.
  */
 export function hashString(input: string): string {
   const buf = Buffer.from(input, 'utf8');
@@ -74,36 +72,4 @@ export function readJson<T>(filePath: string): T {
 /** Check whether a file exists. */
 export function fileExists(filePath: string): boolean {
   return fs.existsSync(filePath);
-}
-
-// ── Logging ───────────────────────────────────────────────────────────────────
-
-const RESET  = '\x1b[0m';
-const BOLD   = '\x1b[1m';
-const GREEN  = '\x1b[32m';
-const CYAN   = '\x1b[36m';
-const YELLOW = '\x1b[33m';
-const RED    = '\x1b[31m';
-const DIM    = '\x1b[2m';
-
-export const log = {
-  info:    (msg: string) => console.log(`${CYAN}ℹ${RESET}  ${msg}`),
-  success: (msg: string) => console.log(`${GREEN}✔${RESET}  ${msg}`),
-  warn:    (msg: string) => console.log(`${YELLOW}⚠${RESET}  ${msg}`),
-  error:   (msg: string) => console.error(`${RED}✖${RESET}  ${msg}`),
-  bold:    (msg: string) => console.log(`${BOLD}${msg}${RESET}`),
-  dim:     (msg: string) => console.log(`${DIM}${msg}${RESET}`),
-  blank:   ()            => console.log(),
-};
-
-/** Format bytes as human-readable string. */
-export function fmtBytes(bytes: number): string {
-  if (bytes < 1024)       return `${bytes} B`;
-  if (bytes < 1024 ** 2)  return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 ** 2).toFixed(2)} MB`;
-}
-
-/** Format milliseconds as human-readable string. */
-export function fmtMs(ms: number): string {
-  return ms < 1 ? `<1 ms` : `${ms.toFixed(2)} ms`;
 }

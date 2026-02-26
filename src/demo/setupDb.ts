@@ -1,14 +1,4 @@
-/**
- * src/demo/setupDb.ts
- * Creates the products table in PostgreSQL, bulk-inserts products, then builds indexes.
- *
- * Indexes are created AFTER all inserts for much faster load on large tables.
- *
- * Usage:
- *   npm run setup-db           → 15,000 products (default)
- *   npm run setup-db-5m        → 5,000,000 products
- *   npx ts-node src/demo/setupDb.ts --count 1000000
- */
+// Indexes are created AFTER all inserts for faster bulk load.
 
 import { Pool } from 'pg';
 

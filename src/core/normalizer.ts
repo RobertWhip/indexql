@@ -1,9 +1,3 @@
-/**
- * src/core/normalizer.ts
- * Normalizes raw product records to match schema field definitions.
- * Coerces types, fills defaults, and strips undeclared fields.
- */
-
 import { SchemaNode, SchemaField, Product } from './types';
 
 // ── Type Coercions ────────────────────────────────────────────────────────────
@@ -25,7 +19,7 @@ function coerceScalar(value: unknown, typeName: string): Scalar {
     // IQ binary types
     case 'Float32': case 'Float64':
       return Number(value ?? 0);
-    case 'Int8': case 'Int16': case 'Int32':
+    case 'Int8': case 'Int16': case 'Int32': case 'Int64':
       return Math.round(Number(value ?? 0));
     case 'Bool':
       return Boolean(value);
@@ -38,11 +32,15 @@ function defaultForType(field: SchemaField): unknown {
   if (field.isList) return [];
   switch (field.type) {
     case 'ID':
-    case 'String':  return '';
+    case 'String':   return '';
     case 'Int':
-    case 'Float':   return 0;
-    case 'Boolean': return false;
-    default:        return null;
+    case 'Float':
+    case 'Float32': case 'Float64':
+    case 'Int8': case 'Int16': case 'Int32': case 'Int64':
+      return 0;
+    case 'Boolean':
+    case 'Bool':     return false;
+    default:         return null;
   }
 }
 
@@ -71,7 +69,7 @@ export function normalizeRecord(raw: RawRecord, node: SchemaNode): Product {
     }
   }
 
-  return out as unknown as Product;
+  return out as Product;
 }
 
 /**

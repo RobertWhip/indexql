@@ -18,14 +18,15 @@
     "setup-db-5m": "npx ts-node src/demo/setupDb.ts --count 5000000",
     "setup-redis": "npx ts-node src/demo/setupRedis.ts",
     "start-redis-server": "npx ts-node src/demo/redisServer.ts",
+    "demo:optimize": "npx ts-node src/demo/optimizeIndexes.ts",
     "test": "npx ts-node tests/runner.ts"
   },
   "dependencies": {
-    "@types/ioredis": "^5.0.0",
     "ioredis": "^5.9.3",
     "pg": "^8.11.0"
   },
   "devDependencies": {
+    "@types/ioredis": "^5.0.0",
     "@types/node": "^20.12.0",
     "@types/pg": "^8.11.0",
     "ts-node": "^10.9.2",

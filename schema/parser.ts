@@ -1,9 +1,3 @@
-/**
- * schema/parser.ts
- * Parses IndexQL GraphQL SDL into structured metadata.
- * Zero external dependencies – pure string processing.
- */
-
 import { ParsedSchema, SchemaNode, SchemaField, FieldDirective } from '../src/core/types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

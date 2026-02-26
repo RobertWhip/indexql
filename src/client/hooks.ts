@@ -1,16 +1,3 @@
-/**
- * src/client/hooks.ts
- * Framework-agnostic reactive "hooks" for the IndexQL client.
- *
- * These mimic React hook semantics in a plain TypeScript closure so the
- * patterns can be lifted into any UI framework (React, Vue, Svelte…).
- *
- * Usage (vanilla TS):
- *   const { state, query, reset } = createQueryHook(client);
- *   query({ filter: { category: 'Electronics' } });
- *   console.log(state.data);
- */
-
 import { IndexQLClient } from './indexqlClient';
 import { QueryOptions, QueryResult, Product, Facet } from '../core/types';
 
@@ -75,7 +62,7 @@ export function createQueryHook(client: IndexQLClient): QueryHook {
     query(options: QueryOptions = {}): void {
       setState({ loading: true, error: null, lastOptions: options });
       try {
-        const result = client.queryProducts({ ...options, includeFacets: true });
+        const result = client.queryProducts({ includeFacets: true, ...options });
         setState({
           loading: false,
           data:    result.data,
@@ -83,7 +70,7 @@ export function createQueryHook(client: IndexQLClient): QueryHook {
           meta:    result.meta,
         });
       } catch (err) {
-        setState({ loading: false, error: String(err) });
+        setState({ loading: false, error: err instanceof Error ? err.message : String(err) });
       }
     },
 

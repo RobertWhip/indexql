@@ -1,16 +1,7 @@
-/**
- * src/demo/httpDemo.ts
- * Real PostgreSQL benchmark — measures query latency with proper B-tree + GIN indexes.
- *
- * Prerequisites:
- *   npm run docker:up   → start PostgreSQL 16
- *   npm run setup-db    → create table, indexes, insert 15k products
- *
- * Run: npm run demo:http
- */
-
+// Prerequisites: npm run docker:up && npm run setup-db
 import { performance } from 'perf_hooks';
 import { Pool, PoolClient } from 'pg';
+import { bold, red, yellow, green, dim, hr, row } from '../fmt';
 
 const pool = new Pool({
   host:                    'localhost',
@@ -21,30 +12,6 @@ const pool = new Pool({
   connectionTimeoutMillis: 3000,
   max:                     5,
 });
-
-// ── Formatting ────────────────────────────────────────────────────────────────
-
-const RESET  = '\x1b[0m';
-const BOLD   = '\x1b[1m';
-const RED    = '\x1b[31m';
-const YELLOW = '\x1b[33m';
-const GREEN  = '\x1b[32m';
-const DIM    = '\x1b[2m';
-
-const b = (s: string) => `${BOLD}${s}${RESET}`;
-const r = (s: string) => `${RED}${s}${RESET}`;
-const y = (s: string) => `${YELLOW}${s}${RESET}`;
-const g = (s: string) => `${GREEN}${s}${RESET}`;
-const d = (s: string) => `${DIM}${s}${RESET}`;
-
-function hr(label: string): void {
-  const pad = '─'.repeat(Math.max(0, 58 - label.length));
-  console.log(`\n${b(`── ${label} ${pad}`)}`);
-}
-
-function row(label: string, value: string): void {
-  console.log(`  ${label.padEnd(30)} ${value}`);
-}
 
 function fmtMs(ms: number): string {
   return ms < 1 ? `${(ms * 1000).toFixed(0)} μs` : `${ms.toFixed(2)} ms`;
@@ -63,7 +30,7 @@ interface BenchResult {
 async function bench(
   client:  PoolClient,
   sql:     string,
-  params:  unknown[],
+  params:  (string | number | boolean | string[])[],
   runs = 5,
 ): Promise<BenchResult> {
   const timings: number[] = [];
@@ -71,7 +38,7 @@ async function bench(
 
   for (let i = 0; i < runs; i++) {
     const t0  = performance.now();
-    const res = await client.query(sql, params as never[]);
+    const res = await client.query(sql, params);
     timings.push(performance.now() - t0);
     rowCount = res.rowCount ?? res.rows.length;
   }
@@ -79,10 +46,10 @@ async function bench(
   // EXPLAIN ANALYZE on an extra run (not counted in timings)
   const explainRes = await client.query(
     `EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) ${sql}`,
-    params as never[],
+    params,
   );
   const explain = (explainRes.rows as Array<{ 'QUERY PLAN': string }>)
-    .map(r => r['QUERY PLAN'])
+    .map(planRow => planRow['QUERY PLAN'])
     .join('\n');
 
   const min = Math.min(...timings);
@@ -108,13 +75,13 @@ async function run(): Promise<void> {
   const bannerPad   = ' '.repeat(Math.max(0, bannerWidth - bannerLabel.length - 2));
 
   console.log();
-  console.log(b('╔══════════════════════════════════════════════════════════╗'));
-  console.log(b(`║  ${bannerLabel}${bannerPad}║`));
-  console.log(b('╚══════════════════════════════════════════════════════════╝'));
-  console.log(d('\n  B-tree indexes on category, brand, price, rating, in_stock'));
-  console.log(d('  Composite: (category, price, in_stock), (category, brand)'));
-  console.log(d('  GIN index: to_tsvector(name || description)'));
-  console.log(d(`  Each query runs 5× — min / avg / max reported.\n`));
+  console.log(bold('╔══════════════════════════════════════════════════════════╗'));
+  console.log(bold(`║  ${bannerLabel}${bannerPad}║`));
+  console.log(bold('╚══════════════════════════════════════════════════════════╝'));
+  console.log(dim('\n  B-tree indexes on category, brand, price, rating, in_stock'));
+  console.log(dim('  Composite: (category, price, in_stock), (category, brand)'));
+  console.log(dim('  GIN index: to_tsvector(name || description)'));
+  console.log(dim(`  Each query runs 5× — min / avg / max reported.\n`));
 
   // ── Connect ───────────────────────────────────────────────────────────────
   let client: PoolClient;
@@ -122,9 +89,9 @@ async function run(): Promise<void> {
     client = await pool.connect();
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(r(`\n  ERROR: Cannot connect to PostgreSQL — ${msg}`));
-    console.error(d('  Start PostgreSQL:  npm run docker:up'));
-    console.error(d('  Seed the database: npm run setup-db\n'));
+    console.error(red(`\n  ERROR: Cannot connect to PostgreSQL — ${msg}`));
+    console.error(dim('  Start PostgreSQL:  npm run docker:up'));
+    console.error(dim('  Seed the database: npm run setup-db\n'));
     await pool.end();
     process.exit(1);
   }
@@ -144,16 +111,17 @@ async function run(): Promise<void> {
          FROM products
         WHERE category = $1 AND price <= $2 AND in_stock = $3
         ORDER BY rating DESC
-        LIMIT 10`,
+        LIMIT 335
+        OFFSET 10000`,
       ['Electronics', 500, true],
     );
 
-    row('Rows returned',   String(rA.rowCount));
-    row('Min / Avg / Max', `${fmtMs(rA.min)} / ${r(fmtMs(rA.avg))} / ${fmtMs(rA.max)}`);
+    row('Rows returned',   String(rA.rowCount), 30);
+    row('Min / Avg / Max', `${fmtMs(rA.min)} / ${red(fmtMs(rA.avg))} / ${fmtMs(rA.max)}`, 30);
     summaryTimings.push(rA.avg);
 
-    console.log(d('\n  EXPLAIN ANALYZE (first 6 lines):'));
-    rA.explain.split('\n').slice(0, 6).forEach(line => console.log(d(`    ${line}`)));
+    console.log(dim('\n  EXPLAIN ANALYZE (first 6 lines):'));
+    rA.explain.split('\n').slice(0, 6).forEach(line => console.log(dim(`    ${line}`)));
 
     // ── Query B: FTS "blender", $100–$600, sort price asc ───────────────────
     hr("2. Query B – FTS 'blender', $100–$600, sort price↑");
@@ -164,16 +132,18 @@ async function run(): Promise<void> {
         WHERE to_tsvector('english', name || ' ' || description)
                 @@ plainto_tsquery('english', $1)
           AND price BETWEEN $2 AND $3
-        ORDER BY price ASC`,
+        ORDER BY price ASC
+        LIMIT 215
+        OFFSET 35000`,
       ['blender', 100, 600],
     );
 
-    row('Rows returned',   String(rB.rowCount));
-    row('Min / Avg / Max', `${fmtMs(rB.min)} / ${r(fmtMs(rB.avg))} / ${fmtMs(rB.max)}`);
+    row('Rows returned',   String(rB.rowCount), 30);
+    row('Min / Avg / Max', `${fmtMs(rB.min)} / ${red(fmtMs(rB.avg))} / ${fmtMs(rB.max)}`, 30);
     summaryTimings.push(rB.avg);
 
-    console.log(d('\n  EXPLAIN ANALYZE (first 6 lines):'));
-    rB.explain.split('\n').slice(0, 6).forEach(line => console.log(d(`    ${line}`)));
+    console.log(dim('\n  EXPLAIN ANALYZE (first 6 lines):'));
+    rB.explain.split('\n').slice(0, 6).forEach(line => console.log(dim(`    ${line}`)));
 
     // ── Query C: Clothing + Nike|Adidas + brand facets ───────────────────────
     hr('3. Query C – Clothing, Nike|Adidas + brand facets');
@@ -182,7 +152,9 @@ async function run(): Promise<void> {
       `SELECT id, name, brand, price, rating
          FROM products
         WHERE category = $1 AND brand = ANY($2)
-        ORDER BY price ASC`,
+        ORDER BY price ASC
+        LIMIT 508
+        OFFSET 80000`,
       ['Clothing', ['Nike', 'Adidas']],
     );
 
@@ -196,17 +168,17 @@ async function run(): Promise<void> {
       ['Clothing', ['Nike', 'Adidas']],
     );
 
-    row('Rows returned',   String(rC.rowCount));
-    row('Min / Avg / Max', `${fmtMs(rC.min)} / ${r(fmtMs(rC.avg))} / ${fmtMs(rC.max)}`);
+    row('Rows returned',   String(rC.rowCount), 30);
+    row('Min / Avg / Max', `${fmtMs(rC.min)} / ${red(fmtMs(rC.avg))} / ${fmtMs(rC.max)}`, 30);
     summaryTimings.push(rC.avg);
 
-    console.log(d('\n  Brand facets:'));
+    console.log(dim('\n  Brand facets:'));
     (facetRes.rows as Array<{ brand: string; cnt: string }>).forEach(fr =>
-      console.log(d(`    ${fr.brand.padEnd(16)} ${fr.cnt} items`))
+      console.log(dim(`    ${fr.brand.padEnd(16)} ${fr.cnt} items`))
     );
 
-    console.log(d('\n  EXPLAIN ANALYZE (first 6 lines):'));
-    rC.explain.split('\n').slice(0, 6).forEach(line => console.log(d(`    ${line}`)));
+    console.log(dim('\n  EXPLAIN ANALYZE (first 6 lines):'));
+    rC.explain.split('\n').slice(0, 6).forEach(line => console.log(dim(`    ${line}`)));
 
     // ── Comparison Summary ────────────────────────────────────────────────────
     hr('4. Comparison Summary');
@@ -222,22 +194,22 @@ async function run(): Promise<void> {
 
     console.log(`  ${'Approach'.padEnd(34)} ${'3 queries'.padEnd(16)} ${'Per query avg'}`);
     console.log(`  ${'─'.repeat(62)}`);
-    console.log(`  ${'PostgreSQL (indexed, local conn)'.padEnd(34)} ${r(`~${pgTotal.toFixed(1)} ms`).padEnd(26)} ${r(`~${pgPerQ.toFixed(1)} ms`)}`);
-    console.log(`  ${'IndexQL (local, after init)'.padEnd(34)} ${y(`~${iqTotal.toFixed(2)} ms`).padEnd(26)} ${y(`~${iqPerQ} ms`)}`);
-    console.log(`  ${'IndexQL init (one-time)'.padEnd(34)} ${d(`~${iqInitMs} ms`).padEnd(26)} ${d('amortised')}`);
+    console.log(`  ${'PostgreSQL (indexed, local conn)'.padEnd(34)} ${red(`~${pgTotal.toFixed(1)} ms`).padEnd(26)} ${red(`~${pgPerQ.toFixed(1)} ms`)}`);
+    console.log(`  ${'IndexQL (local, after init)'.padEnd(34)} ${yellow(`~${iqTotal.toFixed(2)} ms`).padEnd(26)} ${yellow(`~${iqPerQ} ms`)}`);
+    console.log(`  ${'IndexQL init (one-time)'.padEnd(34)} ${dim(`~${iqInitMs} ms`).padEnd(26)} ${dim('amortised')}`);
     console.log();
-    console.log(`  Even with optimal indexes, IndexQL is ~${g(`${ratio}×`)} faster per query.`);
+    console.log(`  Even with optimal indexes, IndexQL is ~${green(`${ratio}×`)} faster per query.`);
     console.log();
-    console.log(d('  PostgreSQL strengths:'));
-    console.log(d('    • Handles writes, transactions, multi-user concurrency'));
-    console.log(d('    • Scales to billions of rows'));
-    console.log(d('    • Full SQL: joins, aggregations, complex queries'));
+    console.log(dim('  PostgreSQL strengths:'));
+    console.log(dim('    • Handles writes, transactions, multi-user concurrency'));
+    console.log(dim('    • Scales to billions of rows'));
+    console.log(dim('    • Full SQL: joins, aggregations, complex queries'));
     console.log();
-    console.log(d('  IndexQL strengths (read-only catalog use case):'));
-    console.log(d('    • Sub-millisecond queries — zero network hops'));
-    console.log(d('    • No server required — serve artifacts from a CDN'));
-    console.log(d('    • Works offline after the first artifact download'));
-    console.log(d('    • Schema-driven: artifact structure matches query contract'));
+    console.log(dim('  IndexQL strengths (read-only catalog use case):'));
+    console.log(dim('    • Sub-millisecond queries — zero network hops'));
+    console.log(dim('    • No server required — serve artifacts from a CDN'));
+    console.log(dim('    • Works offline after the first artifact download'));
+    console.log(dim('    • Schema-driven: artifact structure matches query contract'));
     console.log();
   } finally {
     client.release();

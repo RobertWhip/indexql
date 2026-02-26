@@ -1,9 +1,3 @@
-/**
- * schema/iq-parser.ts
- * Parser for the .iq schema format.
- * Produces IQSchema + helper functions for binary artifact generation.
- */
-
 import { FieldDirective, SchemaNode, SchemaField } from '../src/core/types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -139,7 +133,8 @@ export function stringFields(schema: IQSchema): IQField[] {
 
 /** Sum of bytes per product across all binary columns. */
 export function productStride(schema: IQSchema): number {
-  return binaryFields(schema).reduce((sum, f) => sum + (f.bits! / 8), 0);
+  // bits is always non-null for binary fields (binaryFields filters by isBinary)
+  return binaryFields(schema).reduce((sum, f) => sum + ((f.bits as number) / 8), 0);
 }
 
 /**

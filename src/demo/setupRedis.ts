@@ -1,11 +1,3 @@
-/**
- * src/demo/setupRedis.ts
- * Populate Redis with all products as JSON strings.
- * Key pattern: product:{id}
- *
- * Usage: npx ts-node src/demo/setupRedis.ts
- */
-
 import * as fs   from 'fs';
 import * as path from 'path';
 import Redis     from 'ioredis';

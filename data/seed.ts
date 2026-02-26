@@ -1,10 +1,3 @@
-/**
- * data/seed.ts
- * Generates data/products.json with 15,000 products for the IndexQL vs PostgreSQL demo.
- * Uses a deterministic LCG RNG (seed=42) for reproducibility.
- * Run: npx ts-node data/seed.ts
- */
-
 import * as fs   from 'fs';
 import * as path from 'path';
 import { Product } from '../src/core/types';

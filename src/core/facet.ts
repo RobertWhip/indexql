@@ -1,9 +1,3 @@
-/**
- * src/core/facet.ts
- * Computes TERMS and RANGE facets from a product array.
- * Driven by SchemaNode @facet directives – no hardcoded field names.
- */
-
 import { Product, SchemaNode, Facet, TermsFacet, RangeFacet, RangeBucket } from './types';
 import { fieldsWithDirective } from '../../schema/parser';
 
@@ -13,7 +7,7 @@ function computeTermsFacet(products: Product[], field: string): TermsFacet {
   const counts: Map<string, number> = new Map();
 
   for (const p of products) {
-    const val = (p as unknown as Record<string, unknown>)[field];
+    const val = p[field];
     const values = Array.isArray(val) ? val as string[] : [String(val ?? '')];
     for (const v of values) {
       const sv = String(v);
@@ -45,7 +39,7 @@ function buildRangeBuckets(products: Product[], field: string, min: number, max:
   }
 
   const spread = max - min;
-  const bucketCount = spread <= 10 ? 5 : spread <= 100 ? 5 : 6;
+  const bucketCount = spread <= 100 ? 5 : 6;
   const step = spread / bucketCount;
 
   const buckets: RangeBucket[] = [];
@@ -56,7 +50,7 @@ function buildRangeBuckets(products: Product[], field: string, min: number, max:
       : parseFloat((min + (i + 1) * step).toFixed(2));
 
     const count = products.filter(p => {
-      const v = Number((p as unknown as Record<string, unknown>)[field]);
+      const v = Number(p[field]);
       return i === bucketCount - 1 ? v >= from && v <= to : v >= from && v < to;
     }).length;
 
@@ -72,7 +66,7 @@ function buildRangeBuckets(products: Product[], field: string, min: number, max:
 
 function computeRangeFacet(products: Product[], field: string): RangeFacet {
   const values = products
-    .map(p => Number((p as unknown as Record<string, unknown>)[field]))
+    .map(p => Number(p[field]))
     .filter(v => !isNaN(v));
 
   const min = values.length ? Math.min(...values) : 0;
@@ -96,8 +90,8 @@ function computeRangeFacet(products: Product[], field: string): RangeFacet {
 export function computeFacets(products: Product[], node: SchemaNode): Facet[] {
   const facetFields = fieldsWithDirective(node, 'facet');
   return facetFields.map(field => {
-    const facetDirective = field.directives.find(d => d.name === 'facet')!;
-    const facetType = String(facetDirective.args['type'] ?? 'TERMS');
+    const facetDirective = field.directives.find(d => d.name === 'facet');
+    const facetType = facetDirective ? String(facetDirective.args['type'] ?? 'TERMS') : 'TERMS';
     return facetType === 'RANGE'
       ? computeRangeFacet(products, field.name)
       : computeTermsFacet(products, field.name);

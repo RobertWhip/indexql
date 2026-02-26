@@ -1,19 +1,16 @@
 /**
- * src/core/binary-encoder.ts
- * Column-major binary encoding for IndexQL numeric/boolean product fields.
- *
- * File layout (products.bin):
+ * products.bin layout:
  *   HEADER   [0-3]  magic "IQBN"
  *            [4]    version 0x01
  *            [5-8]  num_products  uint32 LE
  *            [9]    num_columns   uint8
- *   COLUMN DESCRIPTORS (for each column):
+ *   COLUMN DESCRIPTORS (per column):
  *            uint8  name_len
  *            bytes  name  (UTF-8)
  *            uint8  type_code  (1=Bool, 2=Int, 3=Float)
  *            uint8  bits  (8|16|32|64)
- *   DATA (column-major, all little-endian):
- *            For each column c: N × (bits_c/8) bytes
+ *   DATA (column-major, little-endian):
+ *            Per column c: N × (bits_c / 8) bytes
  */
 
 import { Product } from './types';
@@ -35,10 +32,10 @@ const TYPE_INT   = 2;
 const TYPE_FLOAT = 3;
 
 function typeCode(typeName: string): number {
-  if (typeName === 'Bool')                               return TYPE_BOOL;
-  if (typeName.startsWith('Float'))                      return TYPE_FLOAT;
-  if (typeName.startsWith('Int') || typeName === 'Bool') return TYPE_INT;
-  return TYPE_INT;
+  if (typeName === 'Bool')          return TYPE_BOOL;
+  if (typeName.startsWith('Float')) return TYPE_FLOAT;
+  if (typeName.startsWith('Int'))   return TYPE_INT;
+  throw new Error(`Unknown binary type: ${typeName}`);
 }
 
 // ── Encode ────────────────────────────────────────────────────────────────────
@@ -87,7 +84,7 @@ export function encodeColumns(products: Product[], columns: ColumnMeta[]): Buffe
     const col   = columns[ci];
     const bytes = col.bits / 8;
     for (let ri = 0; ri < N; ri++) {
-      const raw = (products[ri] as unknown as Record<string, unknown>)[col.name];
+      const raw = products[ri][col.name];
       const dv  = new DataView(buf.buffer, buf.byteOffset + pos, bytes);
       writeValue(dv, col, raw);
       pos += bytes;
@@ -100,7 +97,7 @@ export function encodeColumns(products: Product[], columns: ColumnMeta[]): Buffe
 function writeValue(dv: DataView, col: ColumnMeta, raw: unknown): void {
   const tc = typeCode(col.typeName);
   if (tc === TYPE_BOOL) {
-    dv.setUint8(0, raw ? 1 : 0);
+    dv.setUint8(0, raw === true ? 1 : 0);
   } else if (tc === TYPE_FLOAT) {
     const v = Number(raw ?? 0);
     if (col.bits === 32)      dv.setFloat32(0, v, true);
@@ -112,8 +109,8 @@ function writeValue(dv: DataView, col: ColumnMeta, raw: unknown): void {
     else if (col.bits === 32) dv.setInt32(0, Math.round(Number(raw ?? 0)), true);
     else {
       // Int64: BigInt
-      try { dv.setBigInt64(0, BigInt(Math.round(Number(raw ?? 0))), true); }
-      catch { dv.setBigInt64(0, 0n, true); }
+      const n = Number(raw ?? 0);
+      dv.setBigInt64(0, BigInt(Math.round(n)), true);
     }
   }
 }
@@ -213,7 +210,7 @@ export function reconstructProducts(
     for (const [field, arr] of Object.entries(strings)) {
       obj[field] = arr[ri];
     }
-    products.push(obj as unknown as Product);
+    products.push(obj as Product);
   }
   return products;
 }

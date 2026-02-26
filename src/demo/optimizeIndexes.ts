@@ -1,42 +1,25 @@
 /**
- * src/demo/optimizeIndexes.ts
- * Replaces the generic indexes with query-specific optimized ones.
+ * Drops 3 generic indexes and replaces them with query-specific covering indexes:
  *
- * Drops (3):
- *   idx_products_in_stock        — boolean, too low-cardinality to be selective
- *   idx_products_cat_price_stock — superseded by new Query-A index
- *   idx_products_cat_brand       — superseded by new Query-C index
- *
- * Adds (3):
  *   idx_opt_a  (category, in_stock, rating DESC) INCLUDE (price, id, name, brand)
- *              Query A: equality on category+in_stock → scan rating DESC → filter
- *              price inline → LIMIT 10 stops after ~70 rows, not 104k.
+ *              Equality on category+in_stock → scan rating DESC → filter price inline.
  *
  *   idx_opt_b  (price) INCLUDE (id, name, brand, rating)
- *              Query B: converts bitmap heap scans to index-only scans, eliminating
- *              ~30k random block reads for the 76k matching rows.
+ *              Converts bitmap heap scans to index-only scans.
  *
  *   idx_opt_c  (category, brand, price) INCLUDE (id, name, rating)
- *              Query C: index already sorted by price → no external merge sort,
- *              no disk spill, 166k rows delivered in order directly.
- *
- * Usage: npx ts-node src/demo/optimizeIndexes.ts
+ *              Already sorted by price → no external merge sort.
  */
 
 import { Pool } from 'pg';
 import { performance } from 'perf_hooks';
+import { BOLD, GREEN, CYAN, DIM, RESET } from '../fmt';
 
 const pool = new Pool({
   host: 'localhost', port: 5432, database: 'indexql',
   user: 'postgres', password: 'postgres',
   connectionTimeoutMillis: 5000,
 });
-
-const BOLD  = '\x1b[1m';
-const GREEN = '\x1b[32m';
-const CYAN  = '\x1b[36m';
-const DIM   = '\x1b[2m';
-const RESET = '\x1b[0m';
 
 async function step(label: string, fn: () => Promise<void>): Promise<void> {
   process.stdout.write(`  ${CYAN}→${RESET}  ${label}… `);
@@ -97,8 +80,8 @@ async function main(): Promise<void> {
     `);
 
     console.log(`\n${BOLD}Current indexes:${RESET}`);
-    for (const r of idxRows) {
-      console.log(`  ${r.indexname.padEnd(42)} ${DIM}${r.size}${RESET}`);
+    for (const idx of idxRows) {
+      console.log(`  ${idx.indexname.padEnd(42)} ${DIM}${idx.size}${RESET}`);
     }
     console.log();
 

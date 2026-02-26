@@ -1,8 +1,3 @@
-/**
- * src/client/utils.ts
- * Lightweight client-side utilities: timing, projection, deep-clone.
- */
-
 import { Product } from '../core/types';
 
 /** High-resolution wall-clock timestamp in milliseconds. */
@@ -20,11 +15,6 @@ export function project(product: Product, fields: (keyof Product)[]): Partial<Pr
     }
   }
   return out;
-}
-
-/** Shallow-clone an array (avoids mutating the cache). */
-export function cloneArray<T>(arr: T[]): T[] {
-  return arr.slice();
 }
 
 /** Normalise a string | string[] filter into a Set<string>. */

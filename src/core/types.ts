@@ -1,8 +1,3 @@
-/**
- * src/core/types.ts
- * Shared type definitions for IndexQL.
- */
-
 // ── Schema Types ──────────────────────────────────────────────────────────────
 
 export type FacetType = 'TERMS' | 'RANGE';
@@ -49,6 +44,7 @@ export interface Product {
   inStock: boolean;
   tags: string[];
   description: string;
+  [field: string]: string | number | boolean | string[];
 }
 
 // ── Facet Types ───────────────────────────────────────────────────────────────
@@ -86,24 +82,6 @@ export interface FacetData {
   facets: Facet[];
   generatedAt: string;
   schema: string;
-}
-
-// ── IQ Schema Types ───────────────────────────────────────────────────────────
-
-export type BinaryTypeCode = 1 | 2 | 3;  // 1=Bool, 2=Int, 3=Float
-
-export interface IQField {
-  name:       string;
-  typeName:   string;
-  bits:       number | null;
-  isBinary:   boolean;
-  isArray:    boolean;
-  directives: FieldDirective[];
-}
-
-export interface IQSchema {
-  collection: string;
-  fields:     IQField[];
 }
 
 // ── Artifact Types ────────────────────────────────────────────────────────────

@@ -1,16 +1,9 @@
-/**
- * src/client/query.ts
- * Local in-memory query engine: filter → sort → paginate → project.
- * This is the core of IndexQL's advantage: zero network latency.
- */
-
 import {
-  Product, Facet, QueryOptions, QueryResult,
+  Product, Facet, SchemaNode, QueryOptions, QueryResult,
   QueryFilter, QuerySort, QueryPagination,
 } from '../core/types';
 import { computeFacets }            from '../core/facet';
 import { project, toSet, matchesSet, now } from './utils';
-import { ParsedSchema, SchemaNode }  from '../core/types';
 
 // ── Filter ────────────────────────────────────────────────────────────────────
 
@@ -45,9 +38,11 @@ function applyFilter(products: Product[], filter: QueryFilter): Product[] {
 function applySort(products: Product[], sort: QuerySort): Product[] {
   const { field, order } = sort;
   return [...products].sort((a, b) => {
-    const av = a[field] as string | number;
-    const bv = b[field] as string | number;
-    const cmp = typeof av === 'string' ? av.localeCompare(String(bv)) : (av as number) - (bv as number);
+    const av = a[field];
+    const bv = b[field];
+    const cmp = typeof av === 'string'
+      ? av.localeCompare(bv as string)
+      : Number(av) - Number(bv);
     return order === 'asc' ? cmp : -cmp;
   });
 }

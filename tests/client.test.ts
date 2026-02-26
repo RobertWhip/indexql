@@ -1,10 +1,5 @@
-/**
- * tests/client.test.ts
- * Unit tests for the query engine and client-side utilities.
- */
-
 import { executeQuery }                           from '../src/client/query';
-import { project, toSet, matchesSet, cloneArray } from '../src/client/utils';
+import { project, toSet, matchesSet } from '../src/client/utils';
 import { createQueryHook, toggleFacetValue }      from '../src/client/hooks';
 import { IndexQLClient }                          from '../src/client/indexqlClient';
 import { parseSchema, getNode }                   from '../schema/parser';
@@ -253,9 +248,9 @@ run('Hooks: toggleFacetValue removes existing value', () => {
   assertEq(result.length, 2, 'length is 2');
 });
 
-run('Hooks: cloneArray does not mutate original', () => {
+run('Utils: array slice does not mutate original', () => {
   const arr  = [1, 2, 3];
-  const copy = cloneArray(arr);
+  const copy = arr.slice();
   copy.push(4);
   assertEq(arr.length, 3, 'original unchanged');
 });

@@ -1,68 +1,89 @@
 # IndexQL – Schema-Driven Catalog Indexing for Node.js
 
-A demonstration of **static artifact delivery** with a **GraphQL-inspired local query interface**.
+Pre-build a compact binary artifact at deploy time, ship it to the client via CDN, and execute all filtering, sorting, and faceting **in-process** — zero network latency per query.
 
-Instead of sending every filter query over HTTP, IndexQL:
-1. Pre-builds a compact encoded artifact at deploy time
-2. Ships it to the client (CDN, local file, etc.)
-3. Executes all filtering, sorting, and faceting **in-process** – zero network latency per query
+## How It Works
 
----
+```
+schema/indexql.iq          .iq schema (types + directives)
+        │
+        ▼
+  data/products.json ──► normalizer ──► Product[]
+                                           │
+                          facet.ts ◄───────┤
+                    binary-encoder.ts ◄────┤
+                                           ▼
+                         artifacts/  ◄── build.ts (CLI)
+                         ├ manifest.json     build metadata + file hashes
+                         ├ products.bin      column-major binary (~132 KB for 15k products)
+                         ├ strings.json      parallel string arrays (~2.5 MB)
+                         └ facets.json       pre-computed facets (~3.5 KB)
+                                           │
+                            CDN / S3 / local file
+                                           │
+                                           ▼
+                         indexqlClient.ts  (load + decode)
+                                           │
+                                           ▼
+                         query.ts  (filter → sort → paginate → project)
+                                           │
+                                           ▼
+                         QueryResult { data, facets, meta }
+```
 
 ## Folder Structure
 
 ```
 indexql-mvp/
 ├── data/
-│   ├── products.json          100 sample products
-│   └── seed.ts                Generates products.json
+│   ├── products.json            15,000 seeded products (LCG seed=42)
+│   └── seed.ts                  Regenerates products.json
 │
 ├── schema/
-│   ├── indexql.schema.graphql Schema with @node, @facet, @sortable, @filterable
-│   └── parser.ts              Zero-dependency GraphQL SDL parser
+│   ├── indexql.iq                IQ schema v2 (types + directives)
+│   └── iq-parser.ts             Zero-dep .iq parser
 │
-├── artifacts/                 Build outputs (run "npm run build")
-│   ├── products.gz.json       Encoded product catalog
-│   ├── facets.gz.json         Pre-computed facets
-│   ├── manifest.json          Build metadata + file hashes
-│   └── README.md              Artifact format documentation
+├── artifacts/                   Build outputs (run "npm run build")
+│   ├── products.bin             Column-major binary (Float32/Bool)
+│   ├── strings.json             Parallel string arrays
+│   ├── facets.json              Pre-computed TERMS + RANGE facets
+│   └── manifest.json            Build metadata + file hashes
 │
 ├── src/
 │   ├── cli/
-│   │   ├── build.ts           Artifact build pipeline
-│   │   ├── inspect.ts         Artifact inspector CLI
-│   │   └── utils.ts           Hashing, file I/O, logging
+│   │   ├── build.ts             Artifact build pipeline
+│   │   └── inspect.ts           Artifact inspector CLI
 │   │
 │   ├── core/
-│   │   ├── types.ts           All shared TypeScript types
-│   │   ├── encoder.ts         Buffer-based encode/decode (no external deps)
-│   │   ├── normalizer.ts      Schema-driven record normalization
-│   │   ├── facet.ts           TERMS + RANGE facet computation
-│   │   └── resolver.ts        Collection registry & data-access layer
+│   │   ├── types.ts             All shared TypeScript types
+│   │   ├── binary-encoder.ts    Column-major encode/decode
+│   │   ├── normalizer.ts        Schema-driven record normalization
+│   │   ├── facet.ts             TERMS + RANGE facet computation
+│   │   └── resolver.ts          Collection registry
 │   │
 │   ├── client/
-│   │   ├── indexqlClient.ts   Client SDK – loads artifacts, exposes query API
-│   │   ├── query.ts           Local query engine: filter → sort → paginate → project
-│   │   ├── hooks.ts           Framework-agnostic reactive query hooks
-│   │   └── utils.ts           Client utilities (timing, projection, set helpers)
+│   │   ├── indexqlClient.ts     Client SDK – loads artifacts, exposes query API
+│   │   ├── query.ts             Local query engine
+│   │   ├── hooks.ts             Framework-agnostic reactive query hooks
+│   │   └── utils.ts             Client utilities
 │   │
 │   └── demo/
-│       ├── indexqlDemo.ts     IndexQL approach demo
-│       ├── httpDemo.ts        Simulated HTTP approach demo
-│       └── output.txt         Sample output
+│       ├── indexqlDemo.ts       IndexQL local demo (Queries A–D)
+│       ├── httpDemo.ts          Real PostgreSQL benchmark
+│       ├── setupDb.ts           PostgreSQL table + indexes setup
+│       ├── setupRedis.ts        Redis pipeline loader
+│       └── redisServer.ts       HTTP proxy for Redis batch fetches
 │
 ├── tests/
-│   ├── runner.ts              Zero-dependency test runner
-│   ├── core.test.ts           Encoder, parser, normalizer, facet tests
-│   ├── client.test.ts         Query engine, hooks, projection tests
-│   └── cli.test.ts            Pipeline integration tests
+│   ├── runner.ts                Zero-dependency test runner
+│   ├── core.test.ts             Encoder, parser, normalizer, facet tests
+│   ├── client.test.ts           Query engine, hooks, projection tests
+│   └── cli.test.ts              Pipeline integration tests
 │
+├── docker-compose.yml           PostgreSQL 16 + Redis 7
 ├── package.json
-├── tsconfig.json
-└── README.md
+└── tsconfig.json
 ```
-
----
 
 ## Setup
 
@@ -70,83 +91,62 @@ indexql-mvp/
 npm install
 ```
 
----
-
-## Workflow
-
-### 1 · Seed Data (optional – products.json is pre-included)
+## Commands
 
 ```bash
-npm run seed
+npm run seed               # Regenerate data/products.json (15k products, LCG seed=42)
+npm run build              # Build artifacts/ (products.bin, strings.json, facets.json)
+npm run inspect            # Inspect artifacts (column layout, facets, sample products)
+npm run demo:indexql       # IndexQL local demo (Queries A–D)
+npm run demo:http          # Real PostgreSQL benchmark (needs docker:up + setup-db)
+npm run demo:compare       # Runs both demos sequentially
+npm run docker:up          # Start PostgreSQL 16 + Redis 7
+npm run docker:down        # Stop services
+npm run setup-db           # Create table + 8 indexes + insert 15k rows
+npm run setup-redis        # Pipeline SET product:{id} into Redis
+npm run start-redis-server # HTTP proxy on port 3001 for Redis batch fetches
+npm test                   # 65 tests
 ```
 
-### 2 · Build Artifacts
+## Schema (.iq format)
 
-```bash
-npm run build
 ```
-
-Emits `artifacts/products.gz.json`, `artifacts/facets.gz.json`, `artifacts/manifest.json`.
-
-### 3 · Inspect Artifacts
-
-```bash
-npm run inspect
-```
-
-### 4 · Run Demos
-
-```bash
-npm run demo:indexql   # Static artifact approach
-npm run demo:http      # Simulated HTTP approach
-npm run demo           # Both
-```
-
-### 5 · Run Tests
-
-```bash
-npm test
-```
-
----
-
-## Schema
-
-```graphql
-type Product @node(collection: "products") {
-  id: ID!
-  name: String! @filterable @searchable
-  price: Float! @facet(type: RANGE) @sortable @filterable
-  category: String! @facet(type: TERMS) @filterable
-  brand: String! @facet(type: TERMS) @filterable
-  rating: Float @facet(type: RANGE) @sortable @filterable
-  inStock: Boolean @filterable
-  tags: [String] @filterable
-  description: String @searchable
+@collection(products)
+type Product {
+  id:          String
+  name:        String
+  price:       Float32   @facet(RANGE)
+  category:    String    @facet(TERMS)
+  brand:       String    @facet(TERMS)
+  rating:      Float32   @facet(RANGE)
+  inStock:     Bool
+  tags:        String[]
+  description: String
 }
 ```
 
-Custom directives:
+Binary fields (`Float32`, `Bool`) are column-major encoded into `products.bin`.
+String fields (`String`, `String[]`) go to `strings.json` as parallel arrays.
 
-| Directive | Scope | Effect |
-|---|---|---|
-| `@node(collection)` | type | Marks a type as a catalog node |
-| `@facet(type)` | field | Includes field in artifact facet computation |
-| `@sortable` | field | Enables client-side sort on this field |
-| `@filterable` | field | Enables QueryFilter condition for this field |
-| `@searchable` | field | Includes field in full-text search |
+| IQ Type | Bits | Binary file |
+|---------|------|-------------|
+| Bool | 8 | products.bin |
+| Int8/16/32/64 | 8–64 | products.bin |
+| Float32/Float64 | 32/64 | products.bin |
+| String / String[] | — | strings.json |
 
----
+Current stride: `price`(4) + `rating`(4) + `inStock`(1) = **9 bytes/product**.
+15,000 products → **~132 KB** binary (vs ~5 MB as JSON).
 
 ## Client SDK
 
 ```typescript
 import { IndexQLClient } from './src/client/indexqlClient';
 
-// Load artifacts once (file reads + Buffer decode)
+// Load artifacts once (file reads + binary decode, ~50 ms)
 const client = IndexQLClient.load();
 
-// GraphQL-like query interface
+// Query — sub-millisecond after init
 const result = client.queryProducts({
   filter: {
     category: 'Electronics',
@@ -160,86 +160,98 @@ const result = client.queryProducts({
   includeFacets: true,
 });
 
-console.log(result.data);         // projected products
-console.log(result.facets);       // facets on filtered set
-console.log(result.meta.timingMs); // sub-millisecond query time
+result.data;            // projected products
+result.facets;          // facets on filtered set
+result.meta.timingMs;   // ~1–2 ms warm
 ```
 
----
+## Deploying Artifacts to S3/CDN
 
-## Demo Output
+The build output in `artifacts/` is a set of static files designed to be served from any CDN or object store. Example using the AWS CLI:
 
-```
-IndexQL approach – 3 queries after init:
-  Init (load+decode)    12.43 ms
-  Query A               0.041 ms
-  Query B               0.038 ms
-  Query C               0.112 ms
-  Total query time      0.191 ms
+```bash
+# Build artifacts locally
+npm run build
 
-HTTP approach (simulated) – same 3 queries:
-  Request A            ~154 ms
-  Request B            ~189 ms
-  Request C            ~201 ms
-  Total                ~544 ms
-
-IndexQL is ~300× faster per query after initialization.
+# Upload to S3
+aws s3 cp artifacts/manifest.json  s3://my-bucket/catalog/manifest.json  --content-type application/json
+aws s3 cp artifacts/products.bin   s3://my-bucket/catalog/products.bin   --content-type application/octet-stream
+aws s3 cp artifacts/strings.json   s3://my-bucket/catalog/strings.json   --content-type application/json
+aws s3 cp artifacts/facets.json    s3://my-bucket/catalog/facets.json    --content-type application/json
 ```
 
-See [`src/demo/output.txt`](src/demo/output.txt) for full output.
+Or with `@aws-sdk/client-s3` in Node:
 
----
+```typescript
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import * as fs from 'fs';
 
-## Pros & Cons
+const s3 = new S3Client({ region: 'us-east-1' });
+const bucket = 'my-bucket';
+const prefix = 'catalog';
 
-### IndexQL (Static Artifact Approach)
+const files = [
+  { key: 'manifest.json', type: 'application/json' },
+  { key: 'products.bin',  type: 'application/octet-stream' },
+  { key: 'strings.json',  type: 'application/json' },
+  { key: 'facets.json',   type: 'application/json' },
+];
 
-| Pros | Cons |
-|---|---|
-| Sub-millisecond queries (zero network RTT) | One-time init cost (file load + decode) |
-| Works offline after first load | Stale data until next artifact build |
-| CDN-friendly: immutable, cacheable artifacts | All data in memory (unsuitable for very large catalogs) |
-| Schema-driven: contract between build + client | Requires build pipeline to update |
-| Pre-computed facets at no per-query cost | No server-side authorisation per query |
-| Supports rich filtering, sorting, pagination, projection | |
-
-### HTTP API (Conventional Approach)
-
-| Pros | Cons |
-|---|---|
-| Always up-to-date data | Network RTT on every query (80–300 ms typical) |
-| Fine-grained server-side authorisation | Server-side filter/facet cost per request |
-| No client memory footprint | Complex caching (ETags, CDN, invalidation) |
-| Suitable for very large catalogs | Latency makes instant-search feel sluggish |
-
----
-
-## Architecture
-
+for (const f of files) {
+  await s3.send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: `${prefix}/${f.key}`,
+    Body: fs.readFileSync(`artifacts/${f.key}`),
+    ContentType: f.type,
+  }));
+}
 ```
-Schema SDL
-   │
-   ▼
-schema/parser.ts ──────────────── SchemaNode (fields + directives)
-   │                                        │
-   │                                        ▼
-data/products.json ──► normalizer.ts ─► Product[]
-                                           │
-                       ◄── facet.ts ───────┤
-                       ◄── encoder.ts ─────┤
-                                           │
-                                           ▼
-                        artifacts/  ◄──  build.ts (CLI)
-                       ├ manifest.json
-                       ├ products.gz.json
-                       └ facets.gz.json
-                                           │
-                                           ▼
-                        indexqlClient.ts (load + decode)
-                                           │
-                                           ▼
-                        query.ts (filter → sort → paginate → project)
-                                           │
-                                           ▼
-                        QueryResult { data, facets, meta }
+
+## Fetching Artifacts Over HTTP (Browser or Node 18+)
+
+Once artifacts are on a CDN, the client can hydrate from HTTP using `fetch`:
+
+```typescript
+const BASE = 'https://cdn.example.com/catalog';
+
+// 1. Fetch manifest
+const manifest = await fetch(`${BASE}/manifest.json`).then(r => r.json());
+
+// 2. Fetch data files in parallel
+const [binBuf, strings, facets] = await Promise.all([
+  fetch(`${BASE}/products.bin`).then(r => r.arrayBuffer()),
+  fetch(`${BASE}/strings.json`).then(r => r.json()),
+  fetch(`${BASE}/facets.json`).then(r => r.json()),
+]);
+
+// 3. Reconstruct products using the binary decoder
+import { reconstructProducts } from './src/core/binary-encoder';
+const products = reconstructProducts(Buffer.from(binBuf), strings);
+
+// Now query in-memory — same API as the local client
 ```
+
+This works identically in browsers (using the native `fetch` and `ArrayBuffer`) and in Node 18+ (using the built-in `fetch`).
+
+## Artifact Sizes (15k products)
+
+| File | Size |
+|------|------|
+| products.bin | 131.9 KB |
+| strings.json | 2.48 MB |
+| facets.json | 3.5 KB |
+| manifest.json | <1 KB |
+| **Total** | **~2.6 MB** |
+
+With gzip/brotli on the CDN, transfer size drops significantly (strings.json compresses well).
+
+## Performance
+
+| Metric | Value |
+|--------|-------|
+| Init (load + decode) | ~50 ms |
+| Warm query | 0.9–2 ms |
+| Products | 15,000 |
+| Binary size | 132 KB |
+
+Compare to a typical PostgreSQL query over HTTP: 80–300 ms per round-trip.

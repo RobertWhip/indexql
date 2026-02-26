@@ -2,3 +2,10 @@ node_modules/
 dist/
 *.js.map
 .DS_Store
+product*.bin
+product*.json
+manifest.json
+strings.json
+facets.json
+secret/
+specs.*.json

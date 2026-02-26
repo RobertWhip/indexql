@@ -1,0 +1,1 @@
+demo FE should not handle explicit decode & encode. all it has to do is call  indexQL.parseProducts()                                                                                                                    

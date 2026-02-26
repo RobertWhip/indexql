@@ -184,6 +184,75 @@ export function decodeColumns(buf: Buffer): DecodedColumns {
   return { meta, numRows, getValue, dataOffset };
 }
 
+// ── Browser-compatible decode (ArrayBuffer) ──────────────────────────────────
+
+export interface DecodedColumnsAB {
+  meta:       ColumnMeta[];
+  numRows:    number;
+  getValue:   (col: number, row: number) => number | boolean | bigint;
+  dataOffset: number;
+}
+
+/**
+ * Parse IQBN binary from an ArrayBuffer (browser-safe, no Node Buffer).
+ * Same interface as decodeColumns but works with fetch().arrayBuffer().
+ */
+export function decodeColumnsFromArrayBuffer(ab: ArrayBuffer): DecodedColumnsAB {
+  const dv    = new DataView(ab);
+  const bytes = new Uint8Array(ab);
+
+  // Header
+  const m0 = bytes[0], m1 = bytes[1], m2 = bytes[2], m3 = bytes[3];
+  if (m0 !== 73 || m1 !== 81 || m2 !== 66 || m3 !== 78) { // "IQBN"
+    throw new Error('Invalid magic bytes');
+  }
+  const version = bytes[4];
+  if (version !== VERSION) throw new Error(`Unsupported version: ${version}`);
+  const numRows    = dv.getUint32(5, true);
+  const numColumns = bytes[9];
+
+  // Descriptors
+  let pos = 10;
+  const meta: ColumnMeta[] = [];
+  const tcodes: number[] = [];
+  for (let ci = 0; ci < numColumns; ci++) {
+    const nameLen = bytes[pos++];
+    let name = '';
+    for (let j = 0; j < nameLen; j++) name += String.fromCharCode(bytes[pos++]);
+    const tc   = bytes[pos++];
+    const bits = bytes[pos++];
+    tcodes.push(tc);
+    let typeName: string;
+    if      (tc === TYPE_BOOL)  typeName = 'Bool';
+    else if (tc === TYPE_FLOAT) typeName = bits === 32 ? 'Float32' : 'Float64';
+    else    typeName = bits === 8 ? 'Int8' : bits === 16 ? 'Int16' : bits === 32 ? 'Int32' : 'Int64';
+    meta.push({ name, typeName, bits });
+  }
+
+  const dataOffset = pos;
+  const colOffsets: number[] = [];
+  let acc = dataOffset;
+  for (const col of meta) {
+    colOffsets.push(acc);
+    acc += numRows * (col.bits / 8);
+  }
+
+  function getValue(ci: number, ri: number): number | boolean | bigint {
+    const col      = meta[ci];
+    const byteSize = col.bits / 8;
+    const off      = colOffsets[ci] + ri * byteSize;
+    const tc       = tcodes[ci];
+    if (tc === TYPE_BOOL)  return dv.getUint8(off) !== 0;
+    if (tc === TYPE_FLOAT) return col.bits === 32 ? dv.getFloat32(off, true) : dv.getFloat64(off, true);
+    if (col.bits === 8)    return dv.getInt8(off);
+    if (col.bits === 16)   return dv.getInt16(off, true);
+    if (col.bits === 32)   return dv.getInt32(off, true);
+    return dv.getBigInt64(off, true);
+  }
+
+  return { meta, numRows, getValue, dataOffset };
+}
+
 // ── Reconstruct ───────────────────────────────────────────────────────────────
 
 /**

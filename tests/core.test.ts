@@ -3,6 +3,7 @@ import { normalizeRecord, normalizeAll }                         from '../src/co
 import { computeFacets }                                         from '../src/core/facet';
 import { Entity, Column, Facet, DataType, getEntitySchema, toSchemaNode } from '../src/core/entity';
 import { Entity as EntityType, SchemaNode }                      from '../src/core/types';
+import { fmtBytes, fmtMs }                                      from '../src/fmt';
 import { run, assert, assertEq }                                 from './runner';
 
 // ── Fixture: decorated entity class ──────────────────────────────────────────
@@ -201,4 +202,57 @@ run('Facets: TERMS facet sorted by count desc', () => {
     assert(brand.buckets[i - 1].count >= brand.buckets[i].count,
       `bucket[${i-1}] count >= bucket[${i}] count`);
   }
+});
+
+// ── Formatting Tests ──────────────────────────────────────────────────────────
+
+run('fmtBytes: sub-kilobyte', () => {
+  assertEq(fmtBytes(512), '512 B', '512 B');
+});
+
+run('fmtBytes: kilobytes', () => {
+  assertEq(fmtBytes(2048), '2.0 KB', '2.0 KB');
+});
+
+run('fmtBytes: megabytes', () => {
+  const result = fmtBytes(1024 * 1024);
+  assert(result.endsWith('MB'), 'ends with MB');
+});
+
+run('fmtMs: sub-millisecond', () => {
+  assertEq(fmtMs(0.5), '<1 ms', '<1 ms for 0.5');
+});
+
+run('fmtMs: normal', () => {
+  assertEq(fmtMs(12.345), '12.35 ms', '12.35 ms');
+});
+
+// ── Pipeline Integration ──────────────────────────────────────────────────────
+
+run('Pipeline: normalize → facet → encodeColumns → reconstruct round-trip', () => {
+  const RAW_ITEMS = [
+    { id: 'a1', name: 'Widget A', price: '29.99', category: 'Tools', brand: 'Acme', rating: 4.2, inStock: 'true',  tags: ['hand-tool'],  description: 'A fine widget' },
+    { id: 'a2', name: 'Widget B', price: 49,      category: 'Tools', brand: 'Acme', rating: 4.5, inStock: true,   tags: ['power-tool'], description: 'Better widget' },
+    { id: 'a3', name: 'Gadget X', price: 149,     category: 'Tech',  brand: 'Zeta', rating: 4.8, inStock: false,  tags: ['smart'],      description: 'Smart gadget' },
+  ];
+
+  const items = normalizeAll(RAW_ITEMS as Record<string, unknown>[], node);
+
+  assertEq(items.length,       3,     '3 items normalized');
+  assertEq(items[0]['price'],  29.99, 'price coerced from string');
+  assertEq(items[0]['inStock'], true, 'inStock coerced from "true"');
+
+  // Facets
+  const facets = computeFacets(items, node);
+  assert(facets.length >= 2, 'at least 2 facets');
+
+  // Binary encode/decode round-trip
+  const buf     = encodeColumns(items, BINARY_COLS);
+  const decoded = decodeColumns(buf);
+  assertEq(decoded.numRows, 3, '3 rows decoded from binary');
+
+  // Check a value
+  const priceIdx = decoded.meta.findIndex(m => m.name === 'price');
+  const price0   = Number(decoded.getValue(priceIdx, 0));
+  assert(Math.abs(price0 - 29.99) < 0.01, `price[0] ≈ 29.99, got ${price0}`);
 });

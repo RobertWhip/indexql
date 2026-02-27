@@ -5,9 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm test              # Run all tests (53 tests, zero-dep runner via ts-node)
-npm run build         # Build artifacts/ (products.bin) from data/products.json + decorator entity
-npm run inspect       # Inspect built artifacts (column layout, sample items)
+npm test              # Run all tests (zero-dep runner via ts-node)
 npm run seed          # Regenerate data/products.json (15k items)
 npm run build:ts      # TypeScript compilation only
 ```
@@ -33,7 +31,6 @@ IndexQL is an **entity-agnostic**, schema-driven indexing library. It compiles s
 - **Query engine** (`src/client/query.ts`) — Convention-based filter: `*Min`/`*Max` → range, `search` → full-text substring, `string[]` → set match, `boolean` → exact match.
 - **Client SDK** (`src/client/indexqlClient.ts`) — `IndexQLClient.load()` synchronously loads artifacts; `.query()` filters/sorts/paginates locally.
 - **Reactive hooks** (`src/client/hooks.ts`) — `createQueryHook(client)` provides stateful pub/sub query wrapper. `toggleFacetValue()` for immutable facet selection.
-- **CLI** (`src/cli/build.ts`, `src/cli/inspect.ts`) — Build pipeline and artifact inspector.
 
 ### Binary format (IQBN)
 
@@ -49,9 +46,8 @@ Magic `IQBN`, version `0x01`, little-endian, column-major layout. Only numeric/b
 
 Tests use a custom zero-dependency runner (`tests/runner.ts`) with `run()`, `assert()`, `assertEq()`, `assertThrows()`. Test files:
 
-- `tests/core.test.ts` — Binary encode/decode roundtrip, normalizer, facets
+- `tests/core.test.ts` — Binary encode/decode roundtrip, normalizer, facets, formatting, pipeline integration
 - `tests/client.test.ts` — Query filtering, sorting, pagination, hooks, projections
-- `tests/cli.test.ts` — Build pipeline integration, hashing, formatting
 
 ## Key constraints
 

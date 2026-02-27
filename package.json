@@ -6,8 +6,6 @@
   "scripts": {
     "build:ts": "tsc",
     "seed": "npx ts-node data/seed.ts",
-    "build": "npx ts-node src/cli/build.ts",
-    "inspect": "npx ts-node src/cli/inspect.ts",
     "demo:indexql": "npx ts-node src/demo/indexqlDemo.ts",
     "demo:http": "npx ts-node src/demo/httpDemo.ts",
     "demo:compare": "npm run demo:indexql && npm run demo:http",

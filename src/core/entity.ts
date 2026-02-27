@@ -1,4 +1,4 @@
-import { encodeColumns, type ColumnMeta } from './binary-encoder';
+import { encodeColumns, reconstructFromArrayBuffer, type ColumnMeta } from './binary-encoder';
 import type { Entity as EntityType } from './types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -151,4 +151,17 @@ export function encodeEntity<T>(cls: new () => T, items: T[]): Buffer {
   const schema  = getEntitySchema(cls);
   const columns = toBinaryColumnMetas(schema);
   return encodeColumns(items as EntityType[], columns);
+}
+
+/**
+ * Decode a binary ArrayBuffer into typed entities using a decorated class.
+ * Browser-safe counterpart to encodeEntity.
+ */
+export function parseEntity<T>(
+  cls: new () => T,
+  ab: ArrayBuffer,
+  strings?: Record<string, string[] | string[][]>
+): T[] {
+  getEntitySchema(cls); // validate decorated class
+  return reconstructFromArrayBuffer(ab, strings) as unknown as T[];
 }

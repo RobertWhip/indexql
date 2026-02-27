@@ -1,4 +1,5 @@
-import type { DecodedProduct, Specs } from './useProducts';
+import type { Product } from '../../shared/product.entity';
+import type { Specs } from './useProducts';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ export const EMPTY_FILTER_STATE: FilterState = {
 // ── Filter System ────────────────────────────────────────────────────────────
 
 export class FilterSystem {
-  private products: DecodedProduct[];
+  private products: Product[];
   private brands: string[];
 
   // Precomputed member sets: brand name → Set of product indices
@@ -62,7 +63,7 @@ export class FilterSystem {
   private fullPriceRange: { min: number; max: number };
   private fullRatingRange: { min: number; max: number };
 
-  constructor(products: DecodedProduct[], specs: Specs) {
+  constructor(products: Product[], specs: Specs) {
     this.products = products;
     this.brands = specs.brands;
 

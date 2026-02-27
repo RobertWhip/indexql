@@ -1,13 +1,6 @@
 import { useState, useEffect } from 'react';
-import { reconstructFromArrayBuffer } from '../../../../src/core/binary-encoder';
-
-export interface DecodedProduct {
-  seq: number;
-  price: number;
-  rating: number;
-  inStock: boolean;
-  brandIdx: number;
-}
+import { parseEntity } from '../../../../src/core/entity';
+import { Product as ProductEntity } from '../../shared/product.entity';
 
 export interface Specs {
   brands: string[];
@@ -26,7 +19,7 @@ export interface Product {
 }
 
 interface UseProductsResult {
-  decoded: DecodedProduct[];
+  decoded: ProductEntity[];
   specs: Specs | null;
   totalProducts: number;
   loading: boolean;
@@ -38,7 +31,7 @@ interface UseProductsResult {
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useProducts(categoryId: string | null): UseProductsResult {
-  const [decoded, setDecoded] = useState<DecodedProduct[]>([]);
+  const [decoded, setDecoded] = useState<ProductEntity[]>([]);
   const [specs, setSpecs] = useState<Specs | null>(null);
   const [totalProducts, setTotalProducts] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -77,7 +70,7 @@ export function useProducts(categoryId: string | null): UseProductsResult {
         ]);
 
         // Decode binary via IndexQL core
-        const items = reconstructFromArrayBuffer(binBuf) as unknown as DecodedProduct[];
+        const items = parseEntity(ProductEntity, binBuf);
 
         const totalMs = Math.round(performance.now() - t0);
 

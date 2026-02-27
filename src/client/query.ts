@@ -1,5 +1,5 @@
 import {
-  Product, Facet, SchemaNode, QueryOptions, QueryResult,
+  Entity, Facet, SchemaNode, QueryOptions, QueryResult,
   QueryFilter, QuerySort, QueryPagination,
 } from '../core/types';
 import { computeFacets }            from '../core/facet';
@@ -7,37 +7,76 @@ import { project, toSet, matchesSet, now } from './utils';
 
 // ── Filter ────────────────────────────────────────────────────────────────────
 
-function applyFilter(products: Product[], filter: QueryFilter): Product[] {
-  const categorySet = toSet(filter.category);
-  const brandSet    = toSet(filter.brand);
-  const tagsSet     = toSet(filter.tags);
-  const search      = filter.search?.toLowerCase();
+/**
+ * Convention-based generic filter engine:
+ *  - Keys ending in `Min` → item[field] >= value  (strip "Min" suffix)
+ *  - Keys ending in `Max` → item[field] <= value  (strip "Max" suffix)
+ *  - `search` → substring match across all string-valued fields
+ *  - boolean value → exact match on item[key]
+ *  - string | string[] → set-based match on item[key]
+ */
+function applyFilter(items: Entity[], filter: QueryFilter): Entity[] {
+  const keys = Object.keys(filter);
+  if (keys.length === 0) return items;
 
-  return products.filter(p => {
-    if (categorySet && !matchesSet(p.category, categorySet)) return false;
-    if (brandSet    && !matchesSet(p.brand, brandSet))       return false;
-    if (tagsSet     && !matchesSet(p.tags,  tagsSet))        return false;
+  return items.filter(item => {
+    for (const key of keys) {
+      const filterVal = filter[key];
+      if (filterVal === undefined) continue;
 
-    if (filter.priceMin  !== undefined && p.price  < filter.priceMin)  return false;
-    if (filter.priceMax  !== undefined && p.price  > filter.priceMax)  return false;
-    if (filter.ratingMin !== undefined && p.rating < filter.ratingMin) return false;
-    if (filter.ratingMax !== undefined && p.rating > filter.ratingMax) return false;
-    if (filter.inStock   !== undefined && p.inStock !== filter.inStock) return false;
+      // Full-text search across all string fields
+      if (key === 'search') {
+        const needle = String(filterVal).toLowerCase();
+        let found = false;
+        for (const v of Object.values(item)) {
+          if (typeof v === 'string' && v.toLowerCase().includes(needle)) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) return false;
+        continue;
+      }
 
-    if (search) {
-      const haystack = `${p.name} ${p.description}`.toLowerCase();
-      if (!haystack.includes(search)) return false;
+      // Range: *Min suffix
+      if (key.endsWith('Min')) {
+        const field = key.slice(0, -3);
+        // lowercase first char: priceMin → price
+        const fieldName = field.charAt(0).toLowerCase() + field.slice(1);
+        if (Number(item[fieldName]) < Number(filterVal)) return false;
+        continue;
+      }
+
+      // Range: *Max suffix
+      if (key.endsWith('Max')) {
+        const field = key.slice(0, -3);
+        const fieldName = field.charAt(0).toLowerCase() + field.slice(1);
+        if (Number(item[fieldName]) > Number(filterVal)) return false;
+        continue;
+      }
+
+      // Boolean exact match
+      if (typeof filterVal === 'boolean') {
+        if (item[key] !== filterVal) return false;
+        continue;
+      }
+
+      // String / string[] set-based match
+      if (typeof filterVal === 'string' || Array.isArray(filterVal)) {
+        const filterSet = toSet(filterVal as string | string[]);
+        if (filterSet && !matchesSet(item[key] as string | string[], filterSet)) return false;
+        continue;
+      }
     }
-
     return true;
   });
 }
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
-function applySort(products: Product[], sort: QuerySort): Product[] {
+function applySort(items: Entity[], sort: QuerySort): Entity[] {
   const { field, order } = sort;
-  return [...products].sort((a, b) => {
+  return [...items].sort((a, b) => {
     const av = a[field];
     const bv = b[field];
     const cmp = typeof av === 'string'
@@ -49,20 +88,20 @@ function applySort(products: Product[], sort: QuerySort): Product[] {
 
 // ── Paginate ──────────────────────────────────────────────────────────────────
 
-function applyPagination(products: Product[], pagination: QueryPagination): Product[] {
+function applyPagination(items: Entity[], pagination: QueryPagination): Entity[] {
   const { page, pageSize } = pagination;
   const start = (page - 1) * pageSize;
-  return products.slice(start, start + pageSize);
+  return items.slice(start, start + pageSize);
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Execute a local query against a product array.
+ * Execute a local query against an entity array.
  * All operations happen in-process – no I/O after initial artifact load.
  */
 export function executeQuery(
-  allProducts: Product[],
+  allItems: Entity[],
   options: QueryOptions,
   schema?: { node: SchemaNode }
 ): QueryResult {
@@ -70,8 +109,8 @@ export function executeQuery(
 
   // 1. Filter
   let results = options.filter
-    ? applyFilter(allProducts, options.filter)
-    : allProducts.slice();
+    ? applyFilter(allItems, options.filter)
+    : allItems.slice();
 
   const total = results.length;
 
@@ -91,7 +130,7 @@ export function executeQuery(
   // 5. Project
   const fields = options.fields ?? [];
   const data = fields.length
-    ? paged.map(p => project(p, fields))
+    ? paged.map(item => project(item, fields))
     : paged;
 
   const timingMs = now() - t0;

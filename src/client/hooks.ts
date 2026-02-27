@@ -1,11 +1,11 @@
 import { IndexQLClient } from './indexqlClient';
-import { QueryOptions, QueryResult, Product, Facet } from '../core/types';
+import { QueryOptions, QueryResult, Entity, Facet } from '../core/types';
 
 // ── State Shape ───────────────────────────────────────────────────────────────
 
 export interface QueryState {
   loading: boolean;
-  data: Partial<Product>[];
+  data: Partial<Entity>[];
   facets: Facet[];
   meta: QueryResult['meta'] | null;
   error: string | null;
@@ -62,7 +62,7 @@ export function createQueryHook(client: IndexQLClient): QueryHook {
     query(options: QueryOptions = {}): void {
       setState({ loading: true, error: null, lastOptions: options });
       try {
-        const result = client.queryProducts({ includeFacets: true, ...options });
+        const result = client.query({ includeFacets: true, ...options });
         setState({
           loading: false,
           data:    result.data,

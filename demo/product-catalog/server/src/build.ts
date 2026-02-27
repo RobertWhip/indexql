@@ -2,19 +2,10 @@ import * as fs   from 'fs';
 import * as path from 'path';
 import { getProductsByCategory, getCategoryBySlug } from './db';
 import { storeProducts } from './redis';
-import { encodeColumns, ColumnMeta } from '../../../src/core/binary-encoder';
-import type { Product } from '../../../src/core/types';
+import { encodeEntity } from '../../../../src/core/entity';
+import { Product } from '../../shared/product.entity';
 
 const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
-
-// Binary columns: seq (Int32), price (Float32), rating (Float32), inStock (Bool), brandIdx (Int8)
-const COLUMNS: ColumnMeta[] = [
-  { name: 'seq',      typeName: 'Int32',   bits: 32 },
-  { name: 'price',    typeName: 'Float32', bits: 32 },
-  { name: 'rating',   typeName: 'Float32', bits: 32 },
-  { name: 'inStock',  typeName: 'Bool',    bits: 8  },
-  { name: 'brandIdx', typeName: 'Int8',    bits: 8  },
-];
 
 export async function buildForCategory(slug: string): Promise<{ categoryId: string; numProducts: number; timingMs: number }> {
   const t0 = performance.now();
@@ -33,23 +24,25 @@ export async function buildForCategory(slug: string): Promise<{ categoryId: stri
   const brandToIdx = new Map<string, number>();
   brands.forEach((b, i) => brandToIdx.set(b, i));
 
-  // 3. Map PG rows → product objects with seq + brandIdx
-  const products = rawRows.map((r: Record<string, unknown>, i: number) => ({
-    seq:         i,
-    id:          r.id,
-    name:        r.name,
+  // 3. Map PG rows → product objects with brandIdx
+  const products = rawRows.map((r: Record<string, unknown>) => ({
+    // Indexable fields (saving them to binary file)
+    seq:         Number(r.seq),
     price:       Number(r.price),
-    category:    slug,
-    brand:       r.brand,
     brandIdx:    brandToIdx.get(r.brand as string)!,
     rating:      Number(r.rating),
     inStock:     r.in_stock === true,
+    // Other fields (saving them to redis)
+    id:          r.id,
+    name:        r.name,
+    category:    slug,
+    brand:       r.brand,
     tags:        r.tags ?? [],
     description: r.description ?? '',
-  }));
+  } as Product));
 
-  // 4. Encode binary (seq, price, rating, inStock, brandIdx)
-  const productsBin = encodeColumns(products as unknown as Product[], COLUMNS);
+  // 4. Generate binary file
+  const productsBin = encodeEntity(Product, products);
 
   // 5. Write artifacts
   const outDir = path.join(PUBLIC_DIR, 'artifacts');

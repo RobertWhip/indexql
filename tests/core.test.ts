@@ -1,10 +1,10 @@
-import { encodeColumns, decodeColumns, reconstructProducts, ColumnMeta } from '../src/core/binary-encoder';
-import { parseIQSchema, binaryFields, stringFields, productStride }       from '../schema/iq-parser';
-import { normalizeRecord, normalizeAll }                                   from '../src/core/normalizer';
-import { computeFacets }                                                   from '../src/core/facet';
-import { parseSchema, getNode, fieldsWithDirective }                       from '../schema/parser';
-import { Product, SchemaNode }                                             from '../src/core/types';
-import { run, assert, assertEq }                                           from './runner';
+import { encodeColumns, decodeColumns, reconstruct, ColumnMeta } from '../src/core/binary-encoder';
+import { parseIQSchema, binaryFields, stringFields, stride }    from '../schema/iq-parser';
+import { normalizeRecord, normalizeAll }                         from '../src/core/normalizer';
+import { computeFacets }                                         from '../src/core/facet';
+import { parseSchema, getNode, fieldsWithDirective }             from '../schema/parser';
+import { Entity, SchemaNode }                                    from '../src/core/types';
+import { run, assert, assertEq }                                 from './runner';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ type Product {
 }
 `;
 
-const SAMPLE_PRODUCTS: Product[] = [
+const SAMPLE_ITEMS: Entity[] = [
   { id: 'p1', name: 'Alpha Headphones', price: 299,  category: 'Electronics', brand: 'Sony',    rating: 4.5, inStock: true,  tags: ['audio'],  description: 'Great sound' },
   { id: 'p2', name: 'Beta Speaker',     price: 149,  category: 'Electronics', brand: 'Bose',    rating: 4.2, inStock: false, tags: ['audio'],  description: 'Portable speaker' },
   { id: 'p3', name: 'Gamma Jacket',     price:  89,  category: 'Clothing',    brand: 'Nike',    rating: 4.6, inStock: true,  tags: ['sport'],  description: 'Lightweight jacket' },
@@ -61,11 +61,11 @@ const BINARY_COLS: ColumnMeta[] = [
 // ── Binary Encoder Tests ──────────────────────────────────────────────────────
 
 run('BinaryEncoder: round-trip encodeColumns / decodeColumns', () => {
-  const buf      = encodeColumns(SAMPLE_PRODUCTS, BINARY_COLS);
+  const buf      = encodeColumns(SAMPLE_ITEMS, BINARY_COLS);
   const decoded  = decodeColumns(buf);
 
-  assertEq(decoded.numRows,       SAMPLE_PRODUCTS.length, 'numRows preserved');
-  assertEq(decoded.meta.length,   BINARY_COLS.length,     'column count preserved');
+  assertEq(decoded.numRows,       SAMPLE_ITEMS.length, 'numRows preserved');
+  assertEq(decoded.meta.length,   BINARY_COLS.length,  'column count preserved');
 
   // Verify a few values
   const priceIdx = decoded.meta.findIndex(m => m.name === 'price');
@@ -78,43 +78,43 @@ run('BinaryEncoder: round-trip encodeColumns / decodeColumns', () => {
 });
 
 run('BinaryEncoder: magic bytes are "IQBN" at offset 0-3', () => {
-  const buf   = encodeColumns(SAMPLE_PRODUCTS, BINARY_COLS);
+  const buf   = encodeColumns(SAMPLE_ITEMS, BINARY_COLS);
   const magic = buf.slice(0, 4).toString('ascii');
   assertEq(magic, 'IQBN', 'magic bytes match');
 });
 
-run('BinaryEncoder: productStride matches descriptor data in header', () => {
+run('BinaryEncoder: stride matches descriptor data in header', () => {
   const iqSchema  = parseIQSchema(MINI_IQ);
-  const stride    = productStride(iqSchema);
+  const s         = stride(iqSchema);
   const binFields = binaryFields(iqSchema);
 
   // Stride should equal sum of bytes per binary field
-  const expected = binFields.reduce((s, f) => s + (f.bits! / 8), 0);
-  assertEq(stride, expected, `stride = ${expected} bytes`);
+  const expected = binFields.reduce((sum, f) => sum + (f.bits! / 8), 0);
+  assertEq(s, expected, `stride = ${expected} bytes`);
 
   // Encode and verify: data section = numRows × stride
   const cols  = binFields.map(f => ({ name: f.name, typeName: f.typeName, bits: f.bits! }));
-  const buf   = encodeColumns(SAMPLE_PRODUCTS, cols);
+  const buf   = encodeColumns(SAMPLE_ITEMS, cols);
   const dec   = decodeColumns(buf);
-  const actualStride = dec.meta.reduce((s, m) => s + m.bits / 8, 0);
-  assertEq(actualStride, stride, 'decoded stride matches schema stride');
+  const actualStride = dec.meta.reduce((sum, m) => sum + m.bits / 8, 0);
+  assertEq(actualStride, s, 'decoded stride matches schema stride');
 });
 
 run('BinaryEncoder: getValue random-access returns correct values', () => {
-  const buf     = encodeColumns(SAMPLE_PRODUCTS, BINARY_COLS);
+  const buf     = encodeColumns(SAMPLE_ITEMS, BINARY_COLS);
   const decoded = decodeColumns(buf);
   const rIdx    = decoded.meta.findIndex(m => m.name === 'rating');
 
-  for (let i = 0; i < SAMPLE_PRODUCTS.length; i++) {
+  for (let i = 0; i < SAMPLE_ITEMS.length; i++) {
     const got      = Number(decoded.getValue(rIdx, i));
-    const expected = SAMPLE_PRODUCTS[i].rating;
+    const expected = SAMPLE_ITEMS[i].rating as number;
     assert(Math.abs(got - expected) < 0.001, `rating[${i}] ≈ ${expected}, got ${got}`);
   }
 });
 
-run('BinaryEncoder: large payload (1000 products × 3 columns) round-trips', () => {
-  const big: Product[] = Array.from({ length: 1000 }, (_, i) => ({
-    ...SAMPLE_PRODUCTS[i % SAMPLE_PRODUCTS.length],
+run('BinaryEncoder: large payload (1000 items × 3 columns) round-trips', () => {
+  const big: Entity[] = Array.from({ length: 1000 }, (_, i) => ({
+    ...SAMPLE_ITEMS[i % SAMPLE_ITEMS.length],
     id:     `p${i}`,
     price:  10 + i * 0.5,
     rating: 1 + (i % 5) * 0.8,
@@ -173,11 +173,16 @@ run('IQ Parser: @facet directives parsed correctly', () => {
   assertEq(String(catFacet!.args['type']), 'TERMS', 'category @facet type = TERMS');
 });
 
-run('IQ Parser: productStride = 9 for (Float32 + Float32 + Bool)', () => {
+run('IQ Parser: stride = 9 for (Float32 + Float32 + Bool)', () => {
   const schema = parseIQSchema(MINI_IQ);
-  const stride = productStride(schema);
+  const s = stride(schema);
   // price(4) + rating(4) + inStock(1) = 9
-  assertEq(stride, 9, 'stride = 9 bytes/product');
+  assertEq(s, 9, 'stride = 9 bytes/item');
+});
+
+run('IQ Parser: typeName parsed from schema', () => {
+  const schema = parseIQSchema(MINI_IQ);
+  assertEq(schema.typeName, 'Product', 'typeName parsed from type block');
 });
 
 // ── SDL Parser Tests (kept for compatibility) ─────────────────────────────────
@@ -227,52 +232,52 @@ run('Parser: enum extraction', () => {
 
 // ── Normalizer Tests ──────────────────────────────────────────────────────────
 
-run('Normalizer: passes through valid product', () => {
+run('Normalizer: passes through valid entity', () => {
   const schema = parseSchema(MINI_SDL);
   const node   = getNode(schema, 'products');
-  const p      = normalizeRecord(SAMPLE_PRODUCTS[0] as Record<string, unknown>, node);
-  assertEq(p.id,       'p1',           'id preserved');
-  assertEq(p.price,    299,            'price preserved');
-  assertEq(p.inStock,  true,           'inStock preserved');
-  assertEq(p.category, 'Electronics',  'category preserved');
+  const item   = normalizeRecord(SAMPLE_ITEMS[0] as Record<string, unknown>, node);
+  assertEq(item['id'],       'p1',           'id preserved');
+  assertEq(item['price'],    299,            'price preserved');
+  assertEq(item['inStock'],  true,           'inStock preserved');
+  assertEq(item['category'], 'Electronics',  'category preserved');
 });
 
 run('Normalizer: coerces price string to float', () => {
   const schema = parseSchema(MINI_SDL);
   const node   = getNode(schema, 'products');
-  const raw    = { ...SAMPLE_PRODUCTS[0], price: '149.99' } as Record<string, unknown>;
-  const p      = normalizeRecord(raw, node);
-  assertEq(p.price, 149.99, 'string price coerced to float');
+  const raw    = { ...SAMPLE_ITEMS[0], price: '149.99' } as Record<string, unknown>;
+  const item   = normalizeRecord(raw, node);
+  assertEq(item['price'], 149.99, 'string price coerced to float');
 });
 
 run('Normalizer: fills missing nullable fields with defaults', () => {
   const schema = parseSchema(MINI_SDL);
   const node   = getNode(schema, 'products');
   const raw    = { id: 'x1', name: 'Test' } as Record<string, unknown>;
-  const p      = normalizeRecord(raw, node);
-  assertEq(p.price,   0,     'missing price defaults to 0');
-  assertEq(p.inStock, false, 'missing inStock defaults to false');
-  assert(Array.isArray(p.tags) && p.tags.length === 0, 'missing tags defaults to []');
+  const item   = normalizeRecord(raw, node);
+  assertEq(item['price'],   0,     'missing price defaults to 0');
+  assertEq(item['inStock'], false, 'missing inStock defaults to false');
+  assert(Array.isArray(item['tags']) && (item['tags'] as string[]).length === 0, 'missing tags defaults to []');
 });
 
 run('Normalizer: strips undeclared fields', () => {
   const schema  = parseSchema(MINI_SDL);
   const node    = getNode(schema, 'products');
-  const raw     = { ...SAMPLE_PRODUCTS[0], _secret: 'hidden', __v: 1 } as Record<string, unknown>;
-  const p       = normalizeRecord(raw, node);
-  assert(!('_secret' in p), '_secret stripped');
-  assert(!('__v'     in p), '__v stripped');
+  const raw     = { ...SAMPLE_ITEMS[0], _secret: 'hidden', __v: 1 } as Record<string, unknown>;
+  const item    = normalizeRecord(raw, node);
+  assert(!('_secret' in item), '_secret stripped');
+  assert(!('__v'     in item), '__v stripped');
 });
 
 run('Normalizer: normalizeAll filters empty ids', () => {
   const schema = parseSchema(MINI_SDL);
   const node   = getNode(schema, 'products');
   const raws   = [
-    ...(SAMPLE_PRODUCTS as Record<string, unknown>[]),
-    { name: 'No ID product' },
+    ...(SAMPLE_ITEMS as Record<string, unknown>[]),
+    { name: 'No ID item' },
   ];
   const out = normalizeAll(raws, node);
-  assertEq(out.length, SAMPLE_PRODUCTS.length, 'product without id is filtered out');
+  assertEq(out.length, SAMPLE_ITEMS.length, 'item without id is filtered out');
 });
 
 // ── Facet Computation Tests ───────────────────────────────────────────────────
@@ -280,7 +285,7 @@ run('Normalizer: normalizeAll filters empty ids', () => {
 run('Facets: TERMS facet for category', () => {
   const schema = parseSchema(MINI_SDL);
   const node   = getNode(schema, 'products');
-  const facets = computeFacets(SAMPLE_PRODUCTS, node);
+  const facets = computeFacets(SAMPLE_ITEMS, node);
   const cat    = facets.find(f => f.field === 'category');
   assert(cat !== undefined,       'category facet computed');
   assert(cat!.type === 'TERMS',   'category facet is TERMS');
@@ -294,7 +299,7 @@ run('Facets: TERMS facet for category', () => {
 run('Facets: RANGE facet for price', () => {
   const schema = parseSchema(MINI_SDL);
   const node   = getNode(schema, 'products');
-  const facets = computeFacets(SAMPLE_PRODUCTS, node);
+  const facets = computeFacets(SAMPLE_ITEMS, node);
   const price  = facets.find(f => f.field === 'price');
   assert(price !== undefined,    'price facet computed');
   assert(price!.type === 'RANGE','price facet is RANGE');
@@ -303,13 +308,13 @@ run('Facets: RANGE facet for price', () => {
   assertEq(rf.max, 299, 'max price is 299');
   assert(rf.buckets.length > 0, 'price buckets populated');
   const total = rf.buckets.reduce((s, b) => s + b.count, 0);
-  assertEq(total, SAMPLE_PRODUCTS.length, 'all products accounted in buckets');
+  assertEq(total, SAMPLE_ITEMS.length, 'all items accounted in buckets');
 });
 
 run('Facets: TERMS facet sorted by count desc', () => {
   const schema  = parseSchema(MINI_SDL);
   const node    = getNode(schema, 'products');
-  const facets  = computeFacets(SAMPLE_PRODUCTS, node);
+  const facets  = computeFacets(SAMPLE_ITEMS, node);
   const brand   = facets.find(f => f.field === 'brand') as import('../src/core/types').TermsFacet;
   assert(brand !== undefined, 'brand facet exists');
   for (let i = 1; i < brand.buckets.length; i++) {

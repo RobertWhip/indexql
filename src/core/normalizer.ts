@@ -1,4 +1,4 @@
-import { SchemaNode, SchemaField, Product } from './types';
+import { SchemaNode, SchemaField, Entity } from './types';
 
 // ── Type Coercions ────────────────────────────────────────────────────────────
 
@@ -53,7 +53,7 @@ function defaultForType(field: SchemaField): unknown {
  * - Fills missing fields with safe defaults.
  * - Unwraps single-element arrays and wraps scalars for list fields.
  */
-export function normalizeRecord(raw: RawRecord, node: SchemaNode): Product {
+export function normalizeRecord(raw: RawRecord, node: SchemaNode): Entity {
   const out: RawRecord = {};
 
   for (const field of node.fields) {
@@ -69,15 +69,15 @@ export function normalizeRecord(raw: RawRecord, node: SchemaNode): Product {
     }
   }
 
-  return out as Product;
+  return out as Entity;
 }
 
 /**
  * Normalize an array of raw records.
  * Skips records missing a required 'id' field after coercion.
  */
-export function normalizeAll(raws: RawRecord[], node: SchemaNode): Product[] {
+export function normalizeAll(raws: RawRecord[], node: SchemaNode): Entity[] {
   return raws
     .map(r => normalizeRecord(r, node))
-    .filter(p => p.id && p.id !== '');
+    .filter(r => r['id'] && r['id'] !== '');
 }

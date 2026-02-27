@@ -13,6 +13,7 @@ export interface IQField {
 
 export interface IQSchema {
   collection: string;
+  typeName:   string;
   fields:     IQField[];
 }
 
@@ -106,22 +107,23 @@ export function parseIQSchema(src: string): IQSchema {
   }
   if (!collection) throw new Error('IQ schema missing @collection directive');
 
-  // Extract fields from type block
-  const typeRe = /type\s+\w+\s*\{([\s\S]*?)\}/;
+  // Extract type name and fields from type block
+  const typeRe = /type\s+(\w+)\s*\{([\s\S]*?)\}/;
   const typeMatch = clean.match(typeRe);
   if (!typeMatch) throw new Error('IQ schema missing type block');
 
-  const body   = typeMatch[1];
+  const typeName = typeMatch[1];
+  const body     = typeMatch[2];
   const fields: IQField[] = [];
   for (const line of body.split('\n')) {
     const field = parseIQField(line);
     if (field) fields.push(field);
   }
 
-  return { collection, fields };
+  return { collection, typeName, fields };
 }
 
-/** Return only binary fields (numeric/bool, stored in products.bin). */
+/** Return only binary fields (numeric/bool, stored in the binary artifact). */
 export function binaryFields(schema: IQSchema): IQField[] {
   return schema.fields.filter(f => f.isBinary);
 }
@@ -131,8 +133,8 @@ export function stringFields(schema: IQSchema): IQField[] {
   return schema.fields.filter(f => !f.isBinary);
 }
 
-/** Sum of bytes per product across all binary columns. */
-export function productStride(schema: IQSchema): number {
+/** Sum of bytes per item across all binary columns. */
+export function stride(schema: IQSchema): number {
   // bits is always non-null for binary fields (binaryFields filters by isBinary)
   return binaryFields(schema).reduce((sum, f) => sum + ((f.bits as number) / 8), 0);
 }
@@ -163,7 +165,7 @@ export function toSchemaNode(schema: IQSchema): SchemaNode {
   }));
 
   return {
-    typeName:   'Product',
+    typeName:   schema.typeName,
     collection: schema.collection,
     fields,
   };

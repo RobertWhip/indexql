@@ -1,6 +1,6 @@
 import * as fs   from 'fs';
 import * as path from 'path';
-import { decodeColumns, reconstructProducts } from '../core/binary-encoder';
+import { decodeColumns, reconstruct } from '../core/binary-encoder';
 import { FacetData, Manifest } from '../core/types';
 import { readJson, fileExists, log, fmtBytes } from './utils';
 
@@ -38,30 +38,30 @@ function inspect(): void {
   console.log(`  Version      : ${manifest.version}`);
   console.log(`  Generated At : ${manifest.generatedAt}`);
   console.log(`  Schema Hash  : ${manifest.schema}`);
-  console.log(`  Products     : ${manifest.numProducts} items`);
-  console.log(`  products.bin : ${fmtBytes(manifest.files.products.sizeBytes)}`);
+  console.log(`  Items        : ${manifest.numItems} items`);
+  console.log(`  binary       : ${fmtBytes(manifest.files.binary.sizeBytes)}`);
   console.log(`  strings.json : ${fmtBytes(manifest.files.strings.sizeBytes)}`);
   console.log(`  facets.json  : ${fmtBytes(manifest.files.facets.sizeBytes)}`);
 
   // ── Column layout ──────────────────────────────────────────────────────────
-  const productsPath = path.join(artifactsDir, 'products.bin');
-  if (fileExists(productsPath)) {
-    const buf     = fs.readFileSync(productsPath);
+  const binaryPath = path.join(artifactsDir, manifest.files.binary.name);
+  if (fileExists(binaryPath)) {
+    const buf     = fs.readFileSync(binaryPath);
     const decoded = decodeColumns(buf);
 
     log.blank();
     hr();
     console.log('BINARY COLUMN LAYOUT');
     hr();
-    let stride = 0;
+    let strideBytes = 0;
     decoded.meta.forEach((col, i) => {
       const bytes = col.bits / 8;
-      stride += bytes;
+      strideBytes += bytes;
       console.log(`  [${i}] ${col.name.padEnd(16)} ${col.typeName.padEnd(8)} ${col.bits} bits  (${bytes} B/row)`);
     });
-    console.log(`\n  Stride per product : ${stride} bytes`);
+    console.log(`\n  Stride per item    : ${strideBytes} bytes`);
     console.log(`  Rows               : ${decoded.numRows}`);
-    console.log(`  Data section size  : ${fmtBytes(decoded.numRows * stride)}`);
+    console.log(`  Data section size  : ${fmtBytes(decoded.numRows * strideBytes)}`);
     console.log(`  Total file size    : ${fmtBytes(buf.byteLength)}`);
   }
 
@@ -89,22 +89,28 @@ function inspect(): void {
     }
   }
 
-  // ── Sample Products ────────────────────────────────────────────────────────
-  if (fileExists(productsPath)) {
-    const buf     = fs.readFileSync(productsPath);
+  // ── Sample Items ──────────────────────────────────────────────────────────
+  if (fileExists(binaryPath)) {
+    const buf     = fs.readFileSync(binaryPath);
     const stringsPath = path.join(artifactsDir, 'strings.json');
     const strings = fileExists(stringsPath)
       ? readJson<Record<string, string[] | string[][]>>(stringsPath)
       : {};
 
-    const products = reconstructProducts(buf, strings);
+    const items = reconstruct(buf, strings);
 
     log.blank();
     hr();
-    console.log(`PRODUCTS SAMPLE  (first 5 of ${products.length})`);
+    console.log(`SAMPLE  (first 5 of ${items.length})`);
     hr();
-    products.slice(0, 5).forEach((p, i) =>
-      console.log(`  ${i + 1}. [${p.id}] ${p.name} – $${p.price}  ★${p.rating}  ${p.inStock ? '✓' : '✗'}`));
+    items.slice(0, 5).forEach((item, i) => {
+      const fields = Object.entries(item)
+        .filter(([, v]) => typeof v !== 'object' || !Array.isArray(v))
+        .map(([k, v]) => `${k}=${v}`)
+        .slice(0, 6)
+        .join('  ');
+      console.log(`  ${i + 1}. ${fields}`);
+    });
   }
 
   log.blank();

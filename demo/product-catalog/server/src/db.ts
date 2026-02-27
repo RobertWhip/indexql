@@ -29,12 +29,17 @@ export interface CategoryTreeNode {
   children: { id: string; name: string; slug: string }[];
 }
 
-export async function getCategoryTree(): Promise<CategoryTreeNode[]> {
-  const db = getPool();
-  const { rows } = await db.query<CategoryRow>(
+export async function getCategories(trx?: Pool): Promise<CategoryRow[]> {
+  const db = trx ?? getPool();
+   const { rows } = await db.query<CategoryRow>(
     'SELECT id, name, slug, parent_id FROM categories ORDER BY name'
   );
 
+  return rows;
+}
+
+export async function getCategoryTree(): Promise<CategoryTreeNode[]> {
+  const rows = await getCategories();
   const parents = rows.filter(r => r.parent_id === null);
   const children = rows.filter(r => r.parent_id !== null);
 
@@ -51,8 +56,8 @@ export async function getCategoryTree(): Promise<CategoryTreeNode[]> {
 export async function getProductsByCategory(categoryId: string) {
   const db = getPool();
   const { rows } = await db.query(
-    `SELECT id, name, price, brand, rating, in_stock, tags, description
-     FROM products WHERE category_id = $1`,
+    `SELECT seq, id, name, price, brand, rating, in_stock, tags, description
+     FROM products WHERE category_id = $1 ORDER BY seq`,
     [categoryId]
   );
   return rows;

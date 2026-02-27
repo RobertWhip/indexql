@@ -1,13 +1,13 @@
-import { Product, SchemaNode, Facet, TermsFacet, RangeFacet, RangeBucket } from './types';
+import { Entity, SchemaNode, Facet, TermsFacet, RangeFacet, RangeBucket } from './types';
 import { fieldsWithDirective } from '../../schema/parser';
 
 // ── TERMS Facet ───────────────────────────────────────────────────────────────
 
-function computeTermsFacet(products: Product[], field: string): TermsFacet {
+function computeTermsFacet(items: Entity[], field: string): TermsFacet {
   const counts: Map<string, number> = new Map();
 
-  for (const p of products) {
-    const val = p[field];
+  for (const item of items) {
+    const val = item[field];
     const values = Array.isArray(val) ? val as string[] : [String(val ?? '')];
     for (const v of values) {
       const sv = String(v);
@@ -33,9 +33,9 @@ function computeTermsFacet(products: Product[], field: string): TermsFacet {
  * Create evenly-spaced numeric buckets between min and max.
  * Bucket count adjusts based on data spread.
  */
-function buildRangeBuckets(products: Product[], field: string, min: number, max: number): RangeBucket[] {
+function buildRangeBuckets(items: Entity[], field: string, min: number, max: number): RangeBucket[] {
   if (min === max) {
-    return [{ from: min, to: max, label: `${min}`, count: products.length }];
+    return [{ from: min, to: max, label: `${min}`, count: items.length }];
   }
 
   const spread = max - min;
@@ -49,8 +49,8 @@ function buildRangeBuckets(products: Product[], field: string, min: number, max:
       ? max
       : parseFloat((min + (i + 1) * step).toFixed(2));
 
-    const count = products.filter(p => {
-      const v = Number(p[field]);
+    const count = items.filter(item => {
+      const v = Number(item[field]);
       return i === bucketCount - 1 ? v >= from && v <= to : v >= from && v < to;
     }).length;
 
@@ -64,9 +64,9 @@ function buildRangeBuckets(products: Product[], field: string, min: number, max:
   return buckets;
 }
 
-function computeRangeFacet(products: Product[], field: string): RangeFacet {
-  const values = products
-    .map(p => Number(p[field]))
+function computeRangeFacet(items: Entity[], field: string): RangeFacet {
+  const values = items
+    .map(item => Number(item[field]))
     .filter(v => !isNaN(v));
 
   const min = values.length ? Math.min(...values) : 0;
@@ -77,24 +77,24 @@ function computeRangeFacet(products: Product[], field: string): RangeFacet {
     field,
     min,
     max,
-    buckets: buildRangeBuckets(products, field, min, max),
+    buckets: buildRangeBuckets(items, field, min, max),
   };
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Compute all facets declared in the schema for the given product set.
+ * Compute all facets declared in the schema for the given item set.
  * Uses @facet(type: TERMS|RANGE) directives to drive computation.
  */
-export function computeFacets(products: Product[], node: SchemaNode): Facet[] {
+export function computeFacets(items: Entity[], node: SchemaNode): Facet[] {
   const facetFields = fieldsWithDirective(node, 'facet');
   return facetFields.map(field => {
     const facetDirective = field.directives.find(d => d.name === 'facet');
     const facetType = facetDirective ? String(facetDirective.args['type'] ?? 'TERMS') : 'TERMS';
     return facetType === 'RANGE'
-      ? computeRangeFacet(products, field.name)
-      : computeTermsFacet(products, field.name);
+      ? computeRangeFacet(items, field.name)
+      : computeTermsFacet(items, field.name);
   });
 }
 

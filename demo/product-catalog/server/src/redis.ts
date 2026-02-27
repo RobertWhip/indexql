@@ -22,7 +22,7 @@ export async function storeProducts(categoryId: string, products: Record<string,
     const pipeline = redis.pipeline();
     for (let j = 0; j < batch.length; j++) {
       const seq = i + j;
-      pipeline.set(`product:${categoryId}:${seq}`, JSON.stringify(batch[j]));
+      pipeline.set(`product:${categoryId}:${batch[j].seq}`, JSON.stringify(batch[j]));
     }
     await pipeline.exec();
     stored += batch.length;

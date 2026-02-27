@@ -32,20 +32,10 @@ export interface ParsedSchema {
   enums: Record<string, string[]>;
 }
 
-// ── Domain Types ──────────────────────────────────────────────────────────────
+// ── Entity Type ──────────────────────────────────────────────────────────────
 
-export interface Product {
-  id: string;
-  name: string;
-  price: number;
-  category: string;
-  brand: string;
-  rating: number;
-  inStock: boolean;
-  tags: string[];
-  description: string;
-  [field: string]: string | number | boolean | string[];
-}
+/** Generic entity record — the base shape for any indexed collection. */
+export type Entity = Record<string, string | number | boolean | string[]>;
 
 // ── Facet Types ───────────────────────────────────────────────────────────────
 
@@ -97,30 +87,26 @@ export interface Manifest {
   version: string;
   schema: string;
   generatedAt: string;
-  numProducts: number;
+  numItems: number;
   files: {
-    products: ArtifactFile;   // products.bin (binary)
-    strings:  ArtifactFile;   // strings.json
-    facets:   ArtifactFile;   // facets.json
+    binary:  ArtifactFile;   // *.bin (column-major binary)
+    strings: ArtifactFile;   // strings.json
+    facets:  ArtifactFile;   // facets.json
   };
 }
 
 // ── Query Types ───────────────────────────────────────────────────────────────
 
-export interface QueryFilter {
-  category?: string | string[];
-  brand?: string | string[];
-  tags?: string | string[];
-  priceMin?: number;
-  priceMax?: number;
-  ratingMin?: number;
-  ratingMax?: number;
-  inStock?: boolean;
-  /** Full-text substring search across name + description */
-  search?: string;
-}
+/**
+ * Convention-based filter:
+ *  - `{field}Min` / `{field}Max` → numeric range
+ *  - `search` → full-text substring across all string fields
+ *  - boolean value → exact match on `{key}`
+ *  - string | string[] value → set-based match on `{key}`
+ */
+export type QueryFilter = Record<string, unknown>;
 
-export type SortField = 'price' | 'rating' | 'name';
+export type SortField = string;
 export type SortOrder = 'asc' | 'desc';
 
 export interface QuerySort {
@@ -138,8 +124,8 @@ export interface QueryOptions {
   filter?: QueryFilter;
   sort?: QuerySort;
   pagination?: QueryPagination;
-  /** Subset of product fields to return (projection) */
-  fields?: (keyof Product)[];
+  /** Subset of entity fields to return (projection) */
+  fields?: string[];
   /** Include recomputed facets on the filtered result set */
   includeFacets?: boolean;
 }
@@ -154,7 +140,7 @@ export interface QueryMeta {
 }
 
 export interface QueryResult {
-  data: Partial<Product>[];
+  data: Partial<Entity>[];
   facets?: Facet[];
   meta: QueryMeta;
 }

@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
-import { getCategoryTree } from './db';
+import { getCategoryTree, getCategories } from './db';
 import { buildForCategory } from './build';
 import { fetchProductsBySeq } from './redis';
 
@@ -28,17 +28,22 @@ app.get('/products/categories', async (_req, res) => {
 
 app.post('/api/load_products', async (req, res) => {
   try {
-    const { slug } = req.body;
-    if (!slug || typeof slug !== 'string') {
-      res.status(400).json({ error: 'Missing slug' });
-      return;
+    const categories = await getCategories();
+
+    for (const category of categories) {
+      try {
+        if (category.parent_id === null) continue;
+
+        console.log(`Building artifacts for: ${category.id} - ${category.slug}`);
+        const { numProducts, timingMs } = await buildForCategory(category.slug);
+        console.log(`  → ${numProducts} products in ${timingMs}ms`);
+      } catch (error) {
+        console.error(`Could not build artifacts for ${category.id} - ${category.slug}`);
+        console.error(error);
+      }
     }
 
-    console.log(`Building artifacts for: ${slug}`);
-    const { categoryId, numProducts, timingMs } = await buildForCategory(slug);
-    console.log(`  → ${numProducts} products in ${timingMs}ms`);
-
-    res.json({ categoryId, numProducts, timingMs });
+    res.json({ status: 'ok' });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('POST /api/load_products error:', message);

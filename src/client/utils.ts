@@ -1,17 +1,17 @@
-import { Product } from '../core/types';
+import { Entity } from '../core/types';
 
 /** High-resolution wall-clock timestamp in milliseconds. */
 export function now(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
-/** Project a product to a subset of fields. */
-export function project(product: Product, fields: (keyof Product)[]): Partial<Product> {
-  if (!fields.length) return product;
-  const out: Partial<Product> = {};
+/** Project an entity to a subset of fields. */
+export function project(item: Entity, fields: string[]): Partial<Entity> {
+  if (!fields.length) return item;
+  const out: Partial<Entity> = {};
   for (const f of fields) {
-    if (Object.prototype.hasOwnProperty.call(product, f)) {
-      (out as Record<string, unknown>)[f] = product[f];
+    if (Object.prototype.hasOwnProperty.call(item, f)) {
+      (out as Record<string, unknown>)[f] = item[f];
     }
   }
   return out;
@@ -23,11 +23,11 @@ export function toSet(value: string | string[] | undefined): Set<string> | undef
   return new Set(Array.isArray(value) ? value : [value]);
 }
 
-/** Check whether a product array value overlaps with a filter set. */
+/** Check whether an entity value overlaps with a filter set. */
 export function matchesSet(
-  productVal: string | string[],
+  value: string | string[],
   filterSet: Set<string>
 ): boolean {
-  const vals = Array.isArray(productVal) ? productVal : [productVal];
+  const vals = Array.isArray(value) ? value : [value];
   return vals.some(v => filterSet.has(v));
 }

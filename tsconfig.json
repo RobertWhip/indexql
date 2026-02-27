@@ -11,7 +11,9 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "experimentalDecorators": true,
+    "types": ["node"]
   },
   "include": ["src/**/*", "schema/**/*", "data/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist", "artifacts"]

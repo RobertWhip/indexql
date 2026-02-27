@@ -1,21 +1,21 @@
-import { ParsedSchema, SchemaNode, Product } from './types';
+import { ParsedSchema, SchemaNode, Entity } from './types';
 import { getNode } from '../../schema/parser';
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 /** A resolver registry maps collection names to in-memory data arrays. */
-export type CollectionRegistry = Map<string, Product[]>;
+export type CollectionRegistry = Map<string, Entity[]>;
 
 /** Create an empty resolver registry. */
 export function createRegistry(): CollectionRegistry {
   return new Map();
 }
 
-/** Register a product array under a collection name. */
+/** Register a data array under a collection name. */
 export function registerCollection(
   registry: CollectionRegistry,
   collection: string,
-  data: Product[]
+  data: Entity[]
 ): void {
   registry.set(collection, data);
 }
@@ -31,16 +31,16 @@ export class Resolver {
     this.registry = registry;
   }
 
-  /** Resolve all products for a schema node's collection. */
-  resolveAll(collection: string): Product[] {
+  /** Resolve all items for a schema node's collection. */
+  resolveAll(collection: string): Entity[] {
     const data = this.registry.get(collection);
     if (!data) throw new Error(`Resolver: no data registered for collection "${collection}"`);
     return data;
   }
 
-  /** Resolve a single product by id. */
-  resolveOne(collection: string, id: string): Product | undefined {
-    return this.resolveAll(collection).find(p => p.id === id);
+  /** Resolve a single item by id. */
+  resolveOne(collection: string, id: string): Entity | undefined {
+    return this.resolveAll(collection).find(item => item['id'] === id);
   }
 
   /** Return the SchemaNode for a collection. */
@@ -57,11 +57,11 @@ export class Resolver {
 /** Convenience factory: build a Resolver from schema + data map. */
 export function createResolver(
   schema: ParsedSchema,
-  data: Record<string, Product[]>
+  data: Record<string, Entity[]>
 ): Resolver {
   const registry = createRegistry();
-  for (const [collection, products] of Object.entries(data)) {
-    registerCollection(registry, collection, products);
+  for (const [collection, items] of Object.entries(data)) {
+    registerCollection(registry, collection, items);
   }
   return new Resolver(schema, registry);
 }

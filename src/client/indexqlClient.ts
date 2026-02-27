@@ -1,8 +1,8 @@
 import * as fs   from 'fs';
 import * as path from 'path';
 import { parseIQSchema, toSchemaNode, IQSchema } from '../../schema/iq-parser';
-import { reconstructProducts }         from '../core/binary-encoder';
-import { Product, FacetData, Manifest, QueryOptions, QueryResult } from '../core/types';
+import { reconstruct }                from '../core/binary-encoder';
+import { Entity, FacetData, Manifest, QueryOptions, QueryResult } from '../core/types';
 import { executeQuery }                from './query';
 import { now }                         from './utils';
 
@@ -21,7 +21,7 @@ export interface ClientConfig {
 
 export interface ClientStats {
   loadTimeMs:   number;
-  productCount: number;
+  itemCount:    number;
   facetCount:   number;
   artifactsDir: string;
 }
@@ -29,7 +29,7 @@ export interface ClientStats {
 // ── IndexQL Client ────────────────────────────────────────────────────────────
 
 export class IndexQLClient {
-  private products!:  Product[];
+  private items!:     Entity[];
   private facetData!: FacetData;
   private manifest!:  Manifest;
   private schema!:    IQSchema;
@@ -57,12 +57,12 @@ export class IndexQLClient {
     }
     this.manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Manifest;
 
-    // 2. Load binary products
-    const productsPath = path.join(this.artifactsDir, this.manifest.files.products.name);
-    const stringsPath  = path.join(this.artifactsDir, this.manifest.files.strings.name);
-    const productsBuf  = fs.readFileSync(productsPath);
+    // 2. Load binary data
+    const binaryPath  = path.join(this.artifactsDir, this.manifest.files.binary.name);
+    const stringsPath = path.join(this.artifactsDir, this.manifest.files.strings.name);
+    const binaryBuf   = fs.readFileSync(binaryPath);
     const strings: Record<string, string[] | string[][]> = JSON.parse(fs.readFileSync(stringsPath, 'utf8'));
-    this.products      = reconstructProducts(productsBuf, strings);
+    this.items        = reconstruct(binaryBuf, strings);
 
     // 3. Load facets
     const facetsPath = path.join(this.artifactsDir, this.manifest.files.facets.name);
@@ -75,7 +75,7 @@ export class IndexQLClient {
     const loadTimeMs = now() - t0;
     this.stats = {
       loadTimeMs,
-      productCount: this.products.length,
+      itemCount:    this.items.length,
       facetCount:   this.facetData.facets.length,
       artifactsDir: this.artifactsDir,
     };
@@ -90,9 +90,9 @@ export class IndexQLClient {
 
   // ── Query API ──────────────────────────────────────────────────────────────
 
-  queryProducts(options: QueryOptions = {}): QueryResult {
+  query(options: QueryOptions = {}): QueryResult {
     const node = toSchemaNode(this.schema);
-    return executeQuery(this.products, options, { node });
+    return executeQuery(this.items, options, { node });
   }
 
   getFacets(): FacetData['facets'] {
@@ -107,7 +107,7 @@ export class IndexQLClient {
     return this.stats;
   }
 
-  getAllProducts(): Product[] {
-    return this.products;
+  getAll(): Entity[] {
+    return this.items;
   }
 }

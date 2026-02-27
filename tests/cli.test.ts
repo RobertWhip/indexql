@@ -2,11 +2,11 @@ import * as fs   from 'fs';
 import * as path from 'path';
 import * as os   from 'os';
 import { hashString, fmtBytes, fmtMs }                from '../src/cli/utils';
-import { encodeColumns, decodeColumns, reconstructProducts, ColumnMeta } from '../src/core/binary-encoder';
+import { encodeColumns, decodeColumns, reconstruct, ColumnMeta } from '../src/core/binary-encoder';
 import { normalizeAll }                                from '../src/core/normalizer';
 import { computeFacets }                               from '../src/core/facet';
 import { parseSchema, getNode }                        from '../schema/parser';
-import { Product, FacetData, Manifest }                from '../src/core/types';
+import { Entity, FacetData, Manifest }                 from '../src/core/types';
 import { run, assert, assertEq }                       from './runner';
 
 // ── Hash ──────────────────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ const SDL = `
   }
 `;
 
-const RAW_PRODUCTS = [
+const RAW_ITEMS = [
   { id: 'a1', name: 'Widget A', price: '29.99', category: 'Tools', brand: 'Acme', rating: 4.2, inStock: 'true',  tags: ['hand-tool'],  description: 'A fine widget' },
   { id: 'a2', name: 'Widget B', price: 49,      category: 'Tools', brand: 'Acme', rating: 4.5, inStock: true,   tags: ['power-tool'], description: 'Better widget' },
   { id: 'a3', name: 'Gadget X', price: 149,     category: 'Tech',  brand: 'Zeta', rating: 4.8, inStock: false,  tags: ['smart'],      description: 'Smart gadget' },
@@ -82,21 +82,21 @@ const BINARY_COLS: ColumnMeta[] = [
 
 // ── Build Pipeline Integration ────────────────────────────────────────────────
 
-run('Pipeline: normalize → facet → encodeColumns → reconstructProducts round-trip', () => {
-  const schema   = parseSchema(SDL);
-  const node     = getNode(schema, 'products');
-  const products = normalizeAll(RAW_PRODUCTS as Record<string, unknown>[], node);
+run('Pipeline: normalize → facet → encodeColumns → reconstruct round-trip', () => {
+  const schema = parseSchema(SDL);
+  const node   = getNode(schema, 'products');
+  const items  = normalizeAll(RAW_ITEMS as Record<string, unknown>[], node);
 
-  assertEq(products.length,   3,     '3 products normalized');
-  assertEq(products[0].price, 29.99, 'price coerced from string');
-  assertEq(products[0].inStock, true, 'inStock coerced from "true"');
+  assertEq(items.length,       3,     '3 items normalized');
+  assertEq(items[0]['price'],  29.99, 'price coerced from string');
+  assertEq(items[0]['inStock'], true, 'inStock coerced from "true"');
 
   // Facets
-  const facets = computeFacets(products, node);
+  const facets = computeFacets(items, node);
   assert(facets.length >= 2, 'at least 2 facets');
 
   // Binary encode/decode round-trip
-  const buf     = encodeColumns(products, BINARY_COLS);
+  const buf     = encodeColumns(items, BINARY_COLS);
   const decoded = decodeColumns(buf);
   assertEq(decoded.numRows, 3, '3 rows decoded from binary');
 
@@ -109,15 +109,15 @@ run('Pipeline: normalize → facet → encodeColumns → reconstructProducts rou
 run('Pipeline: strings.json written and parsed back correctly', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'indexql-strings-'));
   try {
-    const schema   = parseSchema(SDL);
-    const node     = getNode(schema, 'products');
-    const products = normalizeAll(RAW_PRODUCTS as Record<string, unknown>[], node);
+    const schema = parseSchema(SDL);
+    const node   = getNode(schema, 'products');
+    const items  = normalizeAll(RAW_ITEMS as Record<string, unknown>[], node);
 
     // Build strings object (string fields only)
     const strFields = ['id', 'name', 'category', 'brand', 'description', 'tags'];
     const stringsObj: Record<string, unknown[]> = {};
     for (const field of strFields) {
-      stringsObj[field] = products.map(p => p[field]);
+      stringsObj[field] = items.map(item => item[field]);
     }
 
     const stringsPath = path.join(tmpDir, 'strings.json');
@@ -133,27 +133,27 @@ run('Pipeline: strings.json written and parsed back correctly', () => {
   }
 });
 
-run('Pipeline: manifest references products.bin + strings.json with correct fields', () => {
+run('Pipeline: manifest references binary + strings.json with correct fields', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'indexql-manifest-'));
   try {
-    const schema   = parseSchema(SDL);
-    const node     = getNode(schema, 'products');
-    const products = normalizeAll(RAW_PRODUCTS as Record<string, unknown>[], node);
-    const facets   = computeFacets(products, node);
+    const schema = parseSchema(SDL);
+    const node   = getNode(schema, 'products');
+    const items  = normalizeAll(RAW_ITEMS as Record<string, unknown>[], node);
+    const facets = computeFacets(items, node);
     const facetData: FacetData = { facets, generatedAt: new Date().toISOString(), schema: '2.0.0' };
 
-    const buf     = encodeColumns(products, BINARY_COLS);
-    const stringsJson = JSON.stringify({ id: products.map(p => p.id) });
+    const buf     = encodeColumns(items, BINARY_COLS);
+    const stringsJson = JSON.stringify({ id: items.map(item => item['id']) });
 
     const manifest: Manifest = {
       version:     '2.0.0',
       schema:      hashString(SDL),
       generatedAt: new Date().toISOString(),
-      numProducts: products.length,
+      numItems:    items.length,
       files: {
-        products: { name: 'products.bin',  hash: hashString(buf.toString('base64')),   sizeBytes: buf.byteLength,                          count: products.length },
-        strings:  { name: 'strings.json',  hash: hashString(stringsJson),               sizeBytes: Buffer.byteLength(stringsJson, 'utf8') },
-        facets:   { name: 'facets.json',   hash: hashString(JSON.stringify(facetData)), sizeBytes: Buffer.byteLength(JSON.stringify(facetData), 'utf8') },
+        binary:  { name: 'products.bin',  hash: hashString(buf.toString('base64')),   sizeBytes: buf.byteLength,                          count: items.length },
+        strings: { name: 'strings.json',  hash: hashString(stringsJson),               sizeBytes: Buffer.byteLength(stringsJson, 'utf8') },
+        facets:  { name: 'facets.json',   hash: hashString(JSON.stringify(facetData)), sizeBytes: Buffer.byteLength(JSON.stringify(facetData), 'utf8') },
       },
     };
 
@@ -161,12 +161,12 @@ run('Pipeline: manifest references products.bin + strings.json with correct fiel
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
     const loaded = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Manifest;
 
-    assertEq(loaded.version,                 '2.0.0', 'version is 2.0.0');
-    assertEq(loaded.numProducts,             3,       'numProducts = 3');
-    assertEq(loaded.files.products.name,     'products.bin', 'products file is products.bin');
-    assertEq(loaded.files.strings.name,      'strings.json', 'strings file is strings.json');
-    assertEq(loaded.files.facets.name,       'facets.json',  'facets file is facets.json');
-    assertEq(loaded.files.products.count,    3,       'product count in manifest');
+    assertEq(loaded.version,                '2.0.0', 'version is 2.0.0');
+    assertEq(loaded.numItems,              3,       'numItems = 3');
+    assertEq(loaded.files.binary.name,     'products.bin', 'binary file is products.bin');
+    assertEq(loaded.files.strings.name,    'strings.json', 'strings file is strings.json');
+    assertEq(loaded.files.facets.name,     'facets.json',  'facets file is facets.json');
+    assertEq(loaded.files.binary.count,    3,       'item count in manifest');
     assert(typeof loaded.schema === 'string',         'schema hash is string');
     assert(typeof loaded.generatedAt === 'string',    'generatedAt is string');
   } finally {

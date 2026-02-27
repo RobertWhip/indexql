@@ -12,8 +12,8 @@
     "isolatedModules": true,
     "noEmit": true,
     "paths": {
-      "@indexql/*": ["../../src/core/*"],
-      "@schema/*": ["../../schema/*"]
+      "@indexql/*": ["../../../src/core/*"],
+      "@schema/*": ["../../../schema/*"]
     }
   },
   "include": ["src"]

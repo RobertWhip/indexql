@@ -136,6 +136,7 @@ async function main() {
 
   await pool.query(`
     CREATE TABLE products (
+      seq SERIAL,
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       price NUMERIC NOT NULL,

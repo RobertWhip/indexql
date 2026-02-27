@@ -9,7 +9,7 @@ interface Category {
 
 interface Props {
   selectedSlug: string | null;
-  onSelect: (slug: string) => void;
+  onSelect: (slug: string, categoryId: string) => void;
 }
 
 export function CategoryTree({ selectedSlug, onSelect }: Props) {
@@ -62,7 +62,7 @@ export function CategoryTree({ selectedSlug, onSelect }: Props) {
               {parent.children.map(child => (
                 <button
                   key={child.id}
-                  onClick={() => onSelect(child.slug)}
+                  onClick={() => onSelect(child.slug, child.id)}
                   style={{
                     display: 'block',
                     width: '100%',

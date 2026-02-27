@@ -10,10 +10,11 @@ const PAGE_SIZE = 50;
 
 export function App() {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [filterState, setFilterState] = useState<FilterState>(EMPTY_FILTER_STATE);
 
-  const { decoded, specs, totalProducts, loading, error, buildTimingMs, categoryId } = useProducts(selectedSlug);
+  const { decoded, specs, totalProducts, loading, error, timingMs, categoryId } = useProducts(selectedCategoryId);
 
   // Build FilterSystem once when decoded data changes
   const filterSystem = useMemo(() => {
@@ -41,8 +42,9 @@ export function App() {
 
   const { products, loading: pageLoading } = usePageProducts(categoryId, pageSeqs);
 
-  function handleSlugSelect(slug: string) {
+  function handleSlugSelect(slug: string, categoryId: string) {
     setSelectedSlug(slug);
+    setSelectedCategoryId(categoryId);
     setPage(1);
     setFilterState(EMPTY_FILTER_STATE);
   }
@@ -121,7 +123,7 @@ export function App() {
           <ProductList
             products={products}
             slug={selectedSlug}
-            timingMs={buildTimingMs}
+            timingMs={timingMs}
             totalProducts={filteredDecoded.length}
             page={page}
             totalPages={totalPages}

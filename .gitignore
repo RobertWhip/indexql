@@ -9,3 +9,4 @@ strings.json
 facets.json
 secret/
 specs.*.json
+.claude/

@@ -1,8 +1,8 @@
 /**
- * products.bin layout:
+ * Binary column layout (IQBN format):
  *   HEADER   [0-3]  magic "IQBN"
  *            [4]    version 0x01
- *            [5-8]  num_products  uint32 LE
+ *            [5-8]  num_items  uint32 LE
  *            [9]    num_columns   uint8
  *   COLUMN DESCRIPTORS (per column):
  *            uint8  name_len
@@ -13,7 +13,7 @@
  *            Per column c: N × (bits_c / 8) bytes
  */
 
-import { Product } from './types';
+import { Entity } from './types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -23,7 +23,7 @@ export interface ColumnMeta {
   bits:     number;
 }
 
-const MAGIC   = Buffer.from('IQBN', 'ascii');
+const MAGIC_BYTES = [0x49, 0x51, 0x42, 0x4E]; // "IQBN" in ASCII
 const VERSION = 0x01;
 
 // type_code values
@@ -44,11 +44,11 @@ function typeCode(typeName: string): number {
  * Encode numeric/bool columns to a binary Buffer.
  * Each column is written column-major (all rows of column 0, then column 1, …).
  */
-export function encodeColumns(products: Product[], columns: ColumnMeta[]): Buffer {
-  const N = products.length;
+export function encodeColumns(items: Entity[], columns: ColumnMeta[]): Buffer {
+  const N = items.length;
 
   // Build header
-  const headerSize = 4 + 1 + 4 + 1; // magic + version + num_products + num_columns
+  const headerSize = 4 + 1 + 4 + 1; // magic + version + num_items + num_columns
   const descParts: Buffer[] = [];
   for (const col of columns) {
     const nameBytes = Buffer.from(col.name, 'utf8');
@@ -71,7 +71,7 @@ export function encodeColumns(products: Product[], columns: ColumnMeta[]): Buffe
 
   // Write header
   let pos = 0;
-  MAGIC.copy(buf, pos); pos += 4;
+  for (let i = 0; i < 4; i++) buf[pos++] = MAGIC_BYTES[i];
   buf.writeUInt8(VERSION, pos++);
   buf.writeUInt32LE(N, pos); pos += 4;
   buf.writeUInt8(columns.length, pos++);
@@ -84,7 +84,7 @@ export function encodeColumns(products: Product[], columns: ColumnMeta[]): Buffe
     const col   = columns[ci];
     const bytes = col.bits / 8;
     for (let ri = 0; ri < N; ri++) {
-      const raw = products[ri][col.name];
+      const raw = items[ri][col.name];
       const dv  = new DataView(buf.buffer, buf.byteOffset + pos, bytes);
       writeValue(dv, col, raw);
       pos += bytes;
@@ -256,17 +256,18 @@ export function decodeColumnsFromArrayBuffer(ab: ArrayBuffer): DecodedColumnsAB 
 // ── Reconstruct ───────────────────────────────────────────────────────────────
 
 /**
- * Combine binary buffer + strings object → full Product[].
- * @param buf      products.bin Buffer
+ * Combine binary buffer + strings object → full Entity[].
+ * Node-only (uses Buffer). For browser contexts use reconstructFromArrayBuffer.
+ * @param buf      *.bin Buffer (IQBN format)
  * @param strings  strings.json object { fieldName: string[] | string[][] }
  */
-export function reconstructProducts(
+export function reconstruct(
   buf:     Buffer,
   strings: Record<string, string[] | string[][]>
-): Product[] {
+): Entity[] {
   const { meta, numRows, getValue } = decodeColumns(buf);
 
-  const products: Product[] = [];
+  const items: Entity[] = [];
   for (let ri = 0; ri < numRows; ri++) {
     const obj: Record<string, unknown> = {};
     // Binary columns
@@ -279,7 +280,39 @@ export function reconstructProducts(
     for (const [field, arr] of Object.entries(strings)) {
       obj[field] = arr[ri];
     }
-    products.push(obj as Product);
+    items.push(obj as Entity);
   }
-  return products;
+  return items;
+}
+
+/**
+ * Combine binary ArrayBuffer + optional strings → Entity[].
+ * Browser-safe (no Node Buffer). Use this in frontend code.
+ * @param ab       IQBN ArrayBuffer (e.g. from fetch().arrayBuffer())
+ * @param strings  Optional strings.json object { fieldName: string[] | string[][] }
+ */
+export function reconstructFromArrayBuffer(
+  ab:       ArrayBuffer,
+  strings?: Record<string, string[] | string[][]>
+): Entity[] {
+  const { meta, numRows, getValue } = decodeColumnsFromArrayBuffer(ab);
+
+  const items: Entity[] = new Array(numRows);
+  for (let ri = 0; ri < numRows; ri++) {
+    const obj: Record<string, unknown> = {};
+    // Binary columns
+    for (let ci = 0; ci < meta.length; ci++) {
+      const col = meta[ci];
+      const val = getValue(ci, ri);
+      obj[col.name] = col.typeName === 'Bool' ? Boolean(val) : Number(val);
+    }
+    // String columns (if provided)
+    if (strings) {
+      for (const [field, arr] of Object.entries(strings)) {
+        obj[field] = arr[ri];
+      }
+    }
+    items[ri] = obj as Entity;
+  }
+  return items;
 }

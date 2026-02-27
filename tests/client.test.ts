@@ -3,7 +3,7 @@ import { project, toSet, matchesSet } from '../src/client/utils';
 import { createQueryHook, toggleFacetValue }      from '../src/client/hooks';
 import { IndexQLClient }                          from '../src/client/indexqlClient';
 import { parseSchema, getNode }                   from '../schema/parser';
-import { Product }                                from '../src/core/types';
+import { Entity }                                 from '../src/core/types';
 import { run, assert, assertEq, assertThrows }    from './runner';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ const SDL = `
 const schema = parseSchema(SDL);
 const node   = getNode(schema, 'products');
 
-const PRODUCTS: Product[] = [
+const ITEMS: Entity[] = [
   { id: 'p1', name: 'iPhone 15',     price: 999, category: 'Electronics', brand: 'Apple', rating: 4.8, inStock: true,  tags: ['smartphone'],      description: 'Latest iPhone' },
   { id: 'p2', name: 'AirPods Pro',   price: 249, category: 'Electronics', brand: 'Apple', rating: 4.7, inStock: true,  tags: ['earbuds','anc'],    description: 'Wireless earbuds' },
   { id: 'p3', name: 'Galaxy S24',    price: 849, category: 'Electronics', brand: 'Samsung',rating:4.6, inStock: false, tags: ['smartphone'],       description: 'Android flagship' },
@@ -43,64 +43,65 @@ const PRODUCTS: Product[] = [
 
 // ── Query: Filter ─────────────────────────────────────────────────────────────
 
-run('Query: no filter returns all products', () => {
-  const r = executeQuery(PRODUCTS, {});
-  assertEq(r.meta.total, PRODUCTS.length, 'total equals all products');
-  assertEq(r.data.length, PRODUCTS.length, 'data contains all products');
+run('Query: no filter returns all items', () => {
+  const r = executeQuery(ITEMS, {});
+  assertEq(r.meta.total, ITEMS.length, 'total equals all items');
+  assertEq(r.data.length, ITEMS.length, 'data contains all items');
 });
 
 run('Query: filter by single category', () => {
-  const r = executeQuery(PRODUCTS, { filter: { category: 'Electronics' } });
-  assertEq(r.meta.total, 3, '3 Electronics products');
-  assert(r.data.every(p => (p as Product).category === 'Electronics'), 'all results are Electronics');
+  const r = executeQuery(ITEMS, { filter: { category: 'Electronics' } });
+  assertEq(r.meta.total, 3, '3 Electronics items');
+  assert(r.data.every(item => (item as Entity).category === 'Electronics'), 'all results are Electronics');
 });
 
 run('Query: filter by category array', () => {
-  const r = executeQuery(PRODUCTS, { filter: { category: ['Electronics', 'Books'] } });
+  const r = executeQuery(ITEMS, { filter: { category: ['Electronics', 'Books'] } });
   assertEq(r.meta.total, 4, '3 Electronics + 1 Books');
 });
 
 run('Query: filter by brand array', () => {
-  const r = executeQuery(PRODUCTS, { filter: { brand: ['Apple', 'Nike'] } });
+  const r = executeQuery(ITEMS, { filter: { brand: ['Apple', 'Nike'] } });
   assertEq(r.meta.total, 3, '2 Apple + 1 Nike');
 });
 
 run('Query: filter by price range', () => {
-  const r = executeQuery(PRODUCTS, { filter: { priceMin: 100, priceMax: 500 } });
-  r.data.forEach(p => {
-    assert((p as Product).price >= 100 && (p as Product).price <= 500, 'price in range');
+  const r = executeQuery(ITEMS, { filter: { priceMin: 100, priceMax: 500 } });
+  r.data.forEach(item => {
+    const price = Number((item as Entity).price);
+    assert(price >= 100 && price <= 500, 'price in range');
   });
 });
 
 run('Query: filter by inStock', () => {
-  const inStock  = executeQuery(PRODUCTS, { filter: { inStock: true  } });
-  const outStock = executeQuery(PRODUCTS, { filter: { inStock: false } });
-  assertEq(inStock.meta.total + outStock.meta.total, PRODUCTS.length, 'totals add up');
-  assert(inStock.data.every( p => (p as Product).inStock === true),  'all in stock');
-  assert(outStock.data.every(p => (p as Product).inStock === false), 'all out of stock');
+  const inStock  = executeQuery(ITEMS, { filter: { inStock: true  } });
+  const outStock = executeQuery(ITEMS, { filter: { inStock: false } });
+  assertEq(inStock.meta.total + outStock.meta.total, ITEMS.length, 'totals add up');
+  assert(inStock.data.every( item => (item as Entity).inStock === true),  'all in stock');
+  assert(outStock.data.every(item => (item as Entity).inStock === false), 'all out of stock');
 });
 
 run('Query: filter by rating range', () => {
-  const r = executeQuery(PRODUCTS, { filter: { ratingMin: 4.7 } });
-  r.data.forEach(p => assert((p as Product).rating >= 4.7, 'rating >= 4.7'));
+  const r = executeQuery(ITEMS, { filter: { ratingMin: 4.7 } });
+  r.data.forEach(item => assert(Number((item as Entity).rating) >= 4.7, 'rating >= 4.7'));
 });
 
 run('Query: full-text search (case-insensitive)', () => {
-  const r = executeQuery(PRODUCTS, { filter: { search: 'wireless' } });
+  const r = executeQuery(ITEMS, { filter: { search: 'wireless' } });
   assert(r.meta.total >= 1, 'at least one result for "wireless"');
-  r.data.forEach(p => {
-    const hay = `${(p as Product).name} ${(p as Product).description}`.toLowerCase();
+  r.data.forEach(item => {
+    const hay = `${(item as Entity).name} ${(item as Entity).description}`.toLowerCase();
     assert(hay.includes('wireless'), 'search term in name or description');
   });
 });
 
 run('Query: filter by tag', () => {
-  const r = executeQuery(PRODUCTS, { filter: { tags: 'shoes' } });
-  assertEq(r.meta.total, 2, 'two products tagged "shoes"');
+  const r = executeQuery(ITEMS, { filter: { tags: 'shoes' } });
+  assertEq(r.meta.total, 2, 'two items tagged "shoes"');
 });
 
 run('Query: combined filter', () => {
-  const r = executeQuery(PRODUCTS, {
+  const r = executeQuery(ITEMS, {
     filter: { category: 'Electronics', inStock: true, priceMax: 500 },
   });
   assertEq(r.meta.total, 1, 'only AirPods Pro matches (in stock, <$500, Electronics)');
@@ -109,24 +110,24 @@ run('Query: combined filter', () => {
 // ── Query: Sort ───────────────────────────────────────────────────────────────
 
 run('Query: sort price ascending', () => {
-  const r = executeQuery(PRODUCTS, { sort: { field: 'price', order: 'asc' } });
+  const r = executeQuery(ITEMS, { sort: { field: 'price', order: 'asc' } });
   for (let i = 1; i < r.data.length; i++) {
-    assert((r.data[i-1] as Product).price <= (r.data[i] as Product).price, 'ascending price order');
+    assert((r.data[i-1] as Entity).price <= (r.data[i] as Entity).price, 'ascending price order');
   }
 });
 
 run('Query: sort price descending', () => {
-  const r = executeQuery(PRODUCTS, { sort: { field: 'price', order: 'desc' } });
+  const r = executeQuery(ITEMS, { sort: { field: 'price', order: 'desc' } });
   for (let i = 1; i < r.data.length; i++) {
-    assert((r.data[i-1] as Product).price >= (r.data[i] as Product).price, 'descending price order');
+    assert((r.data[i-1] as Entity).price >= (r.data[i] as Entity).price, 'descending price order');
   }
 });
 
 run('Query: sort name ascending', () => {
-  const r = executeQuery(PRODUCTS, { sort: { field: 'name', order: 'asc' } });
+  const r = executeQuery(ITEMS, { sort: { field: 'name', order: 'asc' } });
   for (let i = 1; i < r.data.length; i++) {
     assert(
-      (r.data[i-1] as Product).name.localeCompare((r.data[i] as Product).name) <= 0,
+      ((r.data[i-1] as Entity).name as string).localeCompare((r.data[i] as Entity).name as string) <= 0,
       'ascending name order'
     );
   }
@@ -135,37 +136,37 @@ run('Query: sort name ascending', () => {
 // ── Query: Pagination ─────────────────────────────────────────────────────────
 
 run('Query: pagination page 1', () => {
-  const r = executeQuery(PRODUCTS, { pagination: { page: 1, pageSize: 3 } });
+  const r = executeQuery(ITEMS, { pagination: { page: 1, pageSize: 3 } });
   assertEq(r.data.length, 3,        'page 1 has 3 items');
   assertEq(r.meta.totalPages, 3,    'totalPages = ceil(8/3) = 3');
-  assertEq(r.meta.total, PRODUCTS.length, 'total is unaffected by pagination');
+  assertEq(r.meta.total, ITEMS.length, 'total is unaffected by pagination');
 });
 
 run('Query: pagination page 2', () => {
-  const r = executeQuery(PRODUCTS, { pagination: { page: 2, pageSize: 3 } });
+  const r = executeQuery(ITEMS, { pagination: { page: 2, pageSize: 3 } });
   assertEq(r.data.length, 3, 'page 2 has 3 items');
 });
 
 run('Query: pagination last page (partial)', () => {
-  const r = executeQuery(PRODUCTS, { pagination: { page: 3, pageSize: 3 } });
+  const r = executeQuery(ITEMS, { pagination: { page: 3, pageSize: 3 } });
   assertEq(r.data.length, 2, 'last page has 2 items (8 % 3)');
 });
 
 run('Query: pagination beyond last page returns empty', () => {
-  const r = executeQuery(PRODUCTS, { pagination: { page: 99, pageSize: 5 } });
+  const r = executeQuery(ITEMS, { pagination: { page: 99, pageSize: 5 } });
   assertEq(r.data.length, 0, 'empty page beyond bounds');
 });
 
 // ── Query: Field Projection ───────────────────────────────────────────────────
 
 run('Query: fields projection', () => {
-  const r = executeQuery(PRODUCTS, { fields: ['id', 'name', 'price'] });
-  r.data.forEach(p => {
-    assert('id'    in p, 'id present');
-    assert('name'  in p, 'name present');
-    assert('price' in p, 'price present');
-    assert(!('category' in p), 'category excluded');
-    assert(!('brand'    in p), 'brand excluded');
+  const r = executeQuery(ITEMS, { fields: ['id', 'name', 'price'] });
+  r.data.forEach(item => {
+    assert('id'    in item, 'id present');
+    assert('name'  in item, 'name present');
+    assert('price' in item, 'price present');
+    assert(!('category' in item), 'category excluded');
+    assert(!('brand'    in item), 'brand excluded');
   });
 });
 
@@ -173,7 +174,7 @@ run('Query: fields projection', () => {
 
 run('Query: includeFacets computes facets on filtered set', () => {
   const r = executeQuery(
-    PRODUCTS,
+    ITEMS,
     { filter: { category: 'Electronics' }, includeFacets: true },
     { node }
   );
@@ -183,27 +184,27 @@ run('Query: includeFacets computes facets on filtered set', () => {
 });
 
 run('Query: no facets when includeFacets is false', () => {
-  const r = executeQuery(PRODUCTS, { includeFacets: false });
+  const r = executeQuery(ITEMS, { includeFacets: false });
   assert(r.facets === undefined, 'no facets when disabled');
 });
 
 run('Query: timing is measured', () => {
-  const r = executeQuery(PRODUCTS, {});
+  const r = executeQuery(ITEMS, {});
   assert(r.meta.timingMs >= 0, 'timingMs is non-negative');
 });
 
 // ── Client Utils ──────────────────────────────────────────────────────────────
 
 run('Utils: project returns only specified fields', () => {
-  const p = PRODUCTS[0];
-  const projected = project(p, ['id', 'name']);
+  const item = ITEMS[0];
+  const projected = project(item, ['id', 'name']);
   assertEq(Object.keys(projected).sort().join(','), 'id,name', 'only id and name');
 });
 
-run('Utils: project with empty fields returns full product', () => {
-  const p   = PRODUCTS[0];
-  const out = project(p, []);
-  assertEq(out, p, 'empty fields returns identity');
+run('Utils: project with empty fields returns full entity', () => {
+  const item = ITEMS[0];
+  const out  = project(item, []);
+  assertEq(out, item, 'empty fields returns identity');
 });
 
 run('Utils: toSet handles string', () => {

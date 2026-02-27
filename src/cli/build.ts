@@ -1,11 +1,9 @@
 import * as fs   from 'fs';
 import * as path from 'path';
-import { parseIQSchema, binaryFields, stringFields, toSchemaNode } from '../../schema/iq-parser';
-import { normalizeAll }           from '../core/normalizer';
-import { computeFacets }          from '../core/facet';
-import { encodeColumns }          from '../core/binary-encoder';
-import { FacetData, Manifest }    from '../core/types';
-import { writeBinaryArtifact, writeJsonArtifact, readJson, log, fmtBytes, hashString } from './utils';
+import { parseIQSchema, binaryFields, toSchemaNode } from '../../schema/iq-parser';
+import { normalizeAll }                from '../core/normalizer';
+import { encodeColumns }               from '../core/binary-encoder';
+import { writeBinaryArtifact, log, fmtBytes } from './utils';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -13,7 +11,6 @@ const ROOT          = path.resolve(__dirname, '..', '..');
 const SCHEMA_FILE   = path.join(ROOT, 'schema', 'indexql.iq');
 const DATA_FILE     = path.join(ROOT, 'data',   'products.json');
 const ARTIFACTS_DIR = path.join(ROOT, 'artifacts');
-const SCHEMA_VERSION = '2.0.0';
 
 function parseArgs(): { dataFile: string; outDir: string } {
   const args = process.argv.slice(2);
@@ -40,81 +37,36 @@ async function build(): Promise<void> {
   log.info('Parsing schema…');
   const iqSrc    = fs.readFileSync(SCHEMA_FILE, 'utf8');
   const iqSchema = parseIQSchema(iqSrc);
-  const node     = toSchemaNode(iqSchema);
   const binCols  = binaryFields(iqSchema);
-  const strCols  = stringFields(iqSchema);
-  log.success(`Schema parsed: ${iqSchema.fields.length} fields  (${binCols.length} binary, ${strCols.length} string)`);
+  log.success(`Schema parsed: ${iqSchema.fields.length} fields  (${binCols.length} binary)`);
 
   // ── 2. Load & Normalize ────────────────────────────────────────────────────
   log.info('Loading data…');
-  const rawRecords = readJson<Record<string, unknown>[]>(dataFile);
+  const rawRecords: Record<string, unknown>[] = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
   log.success(`Loaded ${rawRecords.length} raw records`);
 
   log.info('Normalizing…');
+  const node  = toSchemaNode(iqSchema);
   const items = normalizeAll(rawRecords, node);
   log.success(`Normalized ${items.length} items`);
 
-  // ── 3. Facets ──────────────────────────────────────────────────────────────
-  log.info('Computing facets…');
-  const facets = computeFacets(items, node);
-  const facetData: FacetData = {
-    facets,
-    generatedAt: new Date().toISOString(),
-    schema: SCHEMA_VERSION,
-  };
-  log.success(`Computed ${facets.length} facets: ${facets.map(f => f.field).join(', ')}`);
-
-  // ── 4. Encode binary columns ───────────────────────────────────────────────
+  // ── 3. Encode binary columns ───────────────────────────────────────────────
   log.info('Encoding binary columns…');
   const columnMetas = binCols.map(f => ({ name: f.name, typeName: f.typeName, bits: f.bits! }));
   const binaryBuf = encodeColumns(items, columnMetas);
   log.success(`Binary encoded: ${fmtBytes(binaryBuf.byteLength)} (${items.length} × ${columnMetas.length} cols)`);
 
-  // ── 5. Build strings object ────────────────────────────────────────────────
-  log.info('Building strings index…');
-  const stringsObj: Record<string, unknown[]> = {};
-  for (const f of strCols) {
-    stringsObj[f.name] = items.map(item => item[f.name]);
-  }
-
-  // ── 6. Write ───────────────────────────────────────────────────────────────
-  log.info(`Writing artifacts to ${outDir}/…`);
-
-  const binaryMeta = writeBinaryArtifact(outDir, 'products.bin', binaryBuf, items.length);
+  // ── 4. Write ───────────────────────────────────────────────────────────────
+  log.info(`Writing artifact to ${outDir}/…`);
+  const binaryMeta = writeBinaryArtifact(outDir, 'products.bin', binaryBuf);
   log.success(`  products.bin    ${fmtBytes(binaryMeta.sizeBytes)}`);
-
-  const stringsMeta = writeJsonArtifact(outDir, 'strings.json', stringsObj);
-  log.success(`  strings.json    ${fmtBytes(stringsMeta.sizeBytes)}`);
-
-  const facetsMeta = writeJsonArtifact(outDir, 'facets.json', facetData);
-  log.success(`  facets.json     ${fmtBytes(facetsMeta.sizeBytes)}`);
-
-  // ── Manifest ───────────────────────────────────────────────────────────────
-  const schemaHash = hashString(iqSrc);
-  const manifest: Manifest = {
-    version:     SCHEMA_VERSION,
-    schema:      schemaHash,
-    generatedAt: new Date().toISOString(),
-    numItems:    items.length,
-    files: {
-      binary:  binaryMeta,
-      strings: stringsMeta,
-      facets:  facetsMeta,
-    },
-  };
-
-  const manifestPath = path.join(outDir, 'manifest.json');
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
-  log.success(`  manifest.json`);
 
   // ── Summary ────────────────────────────────────────────────────────────────
   log.blank();
   log.bold(`Build complete in ${Date.now() - start} ms`);
   log.dim(`  Items      : ${items.length}`);
-  log.dim(`  Facets     : ${facets.length}`);
   log.dim(`  Binary     : ${fmtBytes(binaryBuf.byteLength)}`);
   log.dim(`  Artifacts  : ${outDir}`);
-  log.dim(`  Schema     : ${schemaHash}`);
 }
 
 build().catch(err => {

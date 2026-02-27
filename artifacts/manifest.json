@@ -1,0 +1,24 @@
+{
+  "version": "2.0.0",
+  "schema": "79dcdcb9006c92ce",
+  "generatedAt": "2026-02-27T00:29:23.825Z",
+  "numItems": 15000,
+  "files": {
+    "binary": {
+      "name": "products.bin",
+      "hash": "cca4aa33b5b151e2",
+      "sizeBytes": 135037,
+      "count": 15000
+    },
+    "strings": {
+      "name": "strings.json",
+      "hash": "5269613902eb2d89",
+      "sizeBytes": 2599722
+    },
+    "facets": {
+      "name": "facets.json",
+      "hash": "0fc493c9717aeeeb",
+      "sizeBytes": 3631
+    }
+  }
+}

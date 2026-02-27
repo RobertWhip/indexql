@@ -65,15 +65,14 @@ Browser (React)                    Express (:3000)              PostgreSQL
      │                                  │  ◄──── rows ──────────────│
      │                                  │                           │
      │                                  │  encodeEntity(Product,    │
-     │                                  │    rows) → products.bin,  │
-     │                                  │  strings.json, facets.json│
-     │  ◄── { ok, manifest, timingMs }  │                           │
+     │                                  │    rows) → products.bin   │
+     │  ◄── { ok, timingMs }            │                           │
      │                                  │                           │
-     │  GET /artifacts/<slug>/*.bin|json │                           │
+     │  GET /artifacts/<slug>/*.bin      │                           │
      │ ──────────────────────────────►  │  (express.static)         │
-     │  ◄──── binary + JSON ────────── │                           │
+     │  ◄──── binary ──────────────── │                           │
      │                                  │                           │
-     │  decodeBinary(arrayBuf, strings) │                           │
+     │  parseEntity(Product, arrayBuf)  │                           │
      │  → Entity[]  (client-side)       │                           │
 ```
 

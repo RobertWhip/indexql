@@ -5,9 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm test              # Run all tests (66 tests, zero-dep runner via ts-node)
-npm run build         # Build artifacts/ from data/products.json + schema/indexql.iq
-npm run inspect       # Inspect built artifacts (manifest, columns, facets, samples)
+npm test              # Run all tests (64 tests, zero-dep runner via ts-node)
+npm run build         # Build artifacts/ (products.bin) from data/products.json + schema/indexql.iq
+npm run inspect       # Inspect built artifacts (column layout, sample items)
 npm run seed          # Regenerate data/products.json (15k items)
 npm run build:ts      # TypeScript compilation only
 ```
@@ -21,7 +21,7 @@ IndexQL is an **entity-agnostic**, schema-driven indexing library. It compiles s
 ### Data flow
 
 ```
-.iq schema → normalizer → binary encoder → artifacts (bin + strings + facets + manifest)
+.iq schema → normalizer → binary encoder → products.bin
                                                 ↓
                                         IndexQLClient.load() → query() → results
 ```
@@ -30,7 +30,7 @@ IndexQL is an **entity-agnostic**, schema-driven indexing library. It compiles s
 
 - **Schema parser** (`schema/iq-parser.ts`) — Parses `.iq` files into `IQSchema`. Defines field types (`Bool`, `Int8/16/32/64`, `Float32/64`, `String`, `String[]`) and directives (`@facet(RANGE|TERMS)`, `@collection(name)`).
 - **Entity decorators** (`src/core/entity.ts`) — `@Entity`, `@Column`, `@Facet` decorators for class-based schema definition. `getEntitySchema()` extracts metadata, `toBinaryColumnMetas()` converts for the encoder.
-- **Binary encoder** (`src/core/binary-encoder.ts`) — Column-major IQBN format. `encodeColumns()` / `decodeColumns()` for Node; `decodeColumnsFromArrayBuffer()` / `reconstructFromArrayBuffer()` for browser.
+- **Binary encoder** (`src/core/binary-encoder.ts`) — Column-major IQBN format. `encodeColumns()` / `decodeColumns()` for Node; `decodeColumnsFromArrayBuffer()` / `reconstructFromArrayBuffer()` for browser. `reconstruct(buf)` decodes binary-only entities.
 - **Query engine** (`src/client/query.ts`) — Convention-based filter: `*Min`/`*Max` → range, `search` → full-text substring, `string[]` → set match, `boolean` → exact match.
 - **Client SDK** (`src/client/indexqlClient.ts`) — `IndexQLClient.load()` synchronously loads artifacts; `.query()` filters/sorts/paginates locally.
 - **Reactive hooks** (`src/client/hooks.ts`) — `createQueryHook(client)` provides stateful pub/sub query wrapper. `toggleFacetValue()` for immutable facet selection.
@@ -38,13 +38,13 @@ IndexQL is an **entity-agnostic**, schema-driven indexing library. It compiles s
 
 ### Binary format (IQBN)
 
-Magic `IQBN`, version `0x01`, little-endian, column-major layout. Numeric/bool fields go into `.bin`; string fields go into `strings.json`. Stride = sum of bytes across all binary columns per item.
+Magic `IQBN`, version `0x01`, little-endian, column-major layout. Only numeric/bool fields are encoded into `products.bin`. String fields are not included in the binary artifact. Stride = sum of bytes across all binary columns per item.
 
 ### Type conventions
 
 - `Entity` = `Record<string, string | number | boolean | string[]>` (generic, not product-specific)
 - `QueryFilter` = `Record<string, unknown>` (convention-based keys)
-- `Manifest` has `numItems`, `files.binary` (not product-specific names)
+- Single artifact: `products.bin` (no manifest, strings, or facets files)
 
 ## Testing
 

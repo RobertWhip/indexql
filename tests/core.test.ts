@@ -1,4 +1,4 @@
-import { encodeColumns, decodeColumns, reconstruct, ColumnMeta } from '../src/core/binary-encoder';
+import { encodeColumns, decodeColumns, ColumnMeta } from '../src/core/binary-encoder';
 import { parseIQSchema, binaryFields, stringFields, stride }    from '../schema/iq-parser';
 import { normalizeRecord, normalizeAll }                         from '../src/core/normalizer';
 import { computeFacets }                                         from '../src/core/facet';

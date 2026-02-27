@@ -10,14 +10,11 @@ schema/indexql.iq          .iq schema (types + directives)
         ▼
   data/products.json ──► normalizer ──► Entity[]
                                            │
-                          facet.ts ◄───────┤
-                    binary-encoder.ts ◄────┤
+                    binary-encoder.ts ◄────┘
+                                           │
                                            ▼
                          artifacts/  ◄── build.ts (CLI)
-                         ├ manifest.json     build metadata + file hashes
-                         ├ products.bin      column-major binary (~132 KB for 15k items)
-                         ├ strings.json      parallel string arrays (~2.5 MB)
-                         └ facets.json       pre-computed facets (~3.5 KB)
+                         └ products.bin      column-major binary (~132 KB for 15k items)
                                            │
                             CDN / S3 / local file
                                            │
@@ -44,10 +41,7 @@ facetql/
 │   └── iq-parser.ts             Zero-dep .iq parser
 │
 ├── artifacts/                   Build outputs (run "npm run build")
-│   ├── products.bin             Column-major binary (Float32/Bool)
-│   ├── strings.json             Parallel string arrays
-│   ├── facets.json              Pre-computed TERMS + RANGE facets
-│   └── manifest.json            Build metadata + file hashes
+│   └── products.bin             Column-major binary (Float32/Bool)
 │
 ├── src/
 │   ├── cli/
@@ -96,9 +90,9 @@ npm install
 
 ```bash
 npm run seed               # Regenerate data/products.json (15k items, LCG seed=42)
-npm run build              # Build artifacts/ (products.bin, strings.json, facets.json)
-npm run inspect            # Inspect artifacts (column layout, facets, sample items)
-npm test                   # 66 tests
+npm run build              # Build artifacts/ (products.bin)
+npm run inspect            # Inspect artifacts (column layout, sample items)
+npm test                   # 64 tests
 ```
 
 ## Schema (.iq format)
@@ -118,18 +112,18 @@ type Product {
 }
 ```
 
-Binary fields (`Float32`, `Bool`) are column-major encoded into `products.bin`.
-String fields (`String`, `String[]`) go to `strings.json` as parallel arrays.
+Binary fields (`Bool`, `Int*`, `Float*`) are column-major encoded into `products.bin`.
+String fields (`String`, `String[]`) are not included in the binary artifact — the build pipeline encodes only numeric/bool columns.
 
-| IQ Type | Bits | Binary file |
-|---------|------|-------------|
+| IQ Type | Bits | Artifact |
+|---------|------|----------|
 | Bool | 8 | products.bin |
 | Int8/16/32/64 | 8–64 | products.bin |
 | Float32/Float64 | 32/64 | products.bin |
-| String / String[] | — | strings.json |
+| String / String[] | — | not encoded |
 
 Current stride: `price`(4) + `rating`(4) + `inStock`(1) = **9 bytes/item**.
-15,000 items → **~132 KB** binary (vs ~5 MB as JSON).
+15,000 items → **~132 KB** binary.
 
 ## Entity Decorators
 
@@ -182,66 +176,29 @@ result.meta.timingMs;   // ~1–2 ms warm
 
 ## Deploying Artifacts to S3/CDN
 
-The build output in `artifacts/` is a set of static files designed to be served from any CDN or object store. Example using the AWS CLI:
+The build output in `artifacts/` is a single binary file designed to be served from any CDN or object store. Example using the AWS CLI:
 
 ```bash
 # Build artifacts locally
 npm run build
 
 # Upload to S3
-aws s3 cp artifacts/manifest.json  s3://my-bucket/catalog/manifest.json  --content-type application/json
-aws s3 cp artifacts/products.bin   s3://my-bucket/catalog/products.bin   --content-type application/octet-stream
-aws s3 cp artifacts/strings.json   s3://my-bucket/catalog/strings.json   --content-type application/json
-aws s3 cp artifacts/facets.json    s3://my-bucket/catalog/facets.json    --content-type application/json
-```
-
-Or with `@aws-sdk/client-s3` in Node:
-
-```typescript
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import * as fs from 'fs';
-
-const s3 = new S3Client({ region: 'us-east-1' });
-const bucket = 'my-bucket';
-const prefix = 'catalog';
-
-const files = [
-  { key: 'manifest.json', type: 'application/json' },
-  { key: 'products.bin',  type: 'application/octet-stream' },
-  { key: 'strings.json',  type: 'application/json' },
-  { key: 'facets.json',   type: 'application/json' },
-];
-
-for (const f of files) {
-  await s3.send(new PutObjectCommand({
-    Bucket: bucket,
-    Key: `${prefix}/${f.key}`,
-    Body: fs.readFileSync(`artifacts/${f.key}`),
-    ContentType: f.type,
-  }));
-}
+aws s3 cp artifacts/products.bin s3://my-bucket/catalog/products.bin --content-type application/octet-stream
 ```
 
 ## Fetching Artifacts Over HTTP (Browser or Node 18+)
 
-Once artifacts are on a CDN, the client can hydrate from HTTP using `fetch`:
+Once the artifact is on a CDN, the client can hydrate from HTTP using `fetch`:
 
 ```typescript
 const BASE = 'https://cdn.example.com/catalog';
 
-// 1. Fetch manifest
-const manifest = await fetch(`${BASE}/manifest.json`).then(r => r.json());
+// Fetch binary artifact
+const binBuf = await fetch(`${BASE}/products.bin`).then(r => r.arrayBuffer());
 
-// 2. Fetch data files in parallel
-const [binBuf, strings, facets] = await Promise.all([
-  fetch(`${BASE}/products.bin`).then(r => r.arrayBuffer()),
-  fetch(`${BASE}/strings.json`).then(r => r.json()),
-  fetch(`${BASE}/facets.json`).then(r => r.json()),
-]);
-
-// 3. Reconstruct entities using the binary decoder
+// Reconstruct entities using the binary decoder
 import { reconstructFromArrayBuffer } from './src/core/binary-encoder';
-const items = reconstructFromArrayBuffer(binBuf, strings);
+const items = reconstructFromArrayBuffer(binBuf);
 
 // Now query in-memory — same API as the local client
 ```
@@ -252,13 +209,7 @@ This works identically in browsers (using the native `fetch` and `ArrayBuffer`) 
 
 | File | Size |
 |------|------|
-| products.bin | 131.9 KB |
-| strings.json | 2.48 MB |
-| facets.json | 3.5 KB |
-| manifest.json | <1 KB |
-| **Total** | **~2.6 MB** |
-
-With gzip/brotli on the CDN, transfer size drops significantly (strings.json compresses well).
+| products.bin | ~132 KB |
 
 ## Performance
 

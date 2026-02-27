@@ -256,29 +256,20 @@ export function decodeColumnsFromArrayBuffer(ab: ArrayBuffer): DecodedColumnsAB 
 // ── Reconstruct ───────────────────────────────────────────────────────────────
 
 /**
- * Combine binary buffer + strings object → full Entity[].
+ * Reconstruct Entity[] from a binary buffer (IQBN format).
  * Node-only (uses Buffer). For browser contexts use reconstructFromArrayBuffer.
- * @param buf      *.bin Buffer (IQBN format)
- * @param strings  strings.json object { fieldName: string[] | string[][] }
+ * @param buf  *.bin Buffer (IQBN format)
  */
-export function reconstruct(
-  buf:     Buffer,
-  strings: Record<string, string[] | string[][]>
-): Entity[] {
+export function reconstruct(buf: Buffer): Entity[] {
   const { meta, numRows, getValue } = decodeColumns(buf);
 
   const items: Entity[] = [];
   for (let ri = 0; ri < numRows; ri++) {
     const obj: Record<string, unknown> = {};
-    // Binary columns
     for (let ci = 0; ci < meta.length; ci++) {
       const col = meta[ci];
       const val = getValue(ci, ri);
       obj[col.name] = col.typeName === 'Bool' ? Boolean(val) : Number(val);
-    }
-    // String columns
-    for (const [field, arr] of Object.entries(strings)) {
-      obj[field] = arr[ri];
     }
     items.push(obj as Entity);
   }
@@ -286,31 +277,20 @@ export function reconstruct(
 }
 
 /**
- * Combine binary ArrayBuffer + optional strings → Entity[].
+ * Reconstruct Entity[] from an IQBN ArrayBuffer.
  * Browser-safe (no Node Buffer). Use this in frontend code.
- * @param ab       IQBN ArrayBuffer (e.g. from fetch().arrayBuffer())
- * @param strings  Optional strings.json object { fieldName: string[] | string[][] }
+ * @param ab  IQBN ArrayBuffer (e.g. from fetch().arrayBuffer())
  */
-export function reconstructFromArrayBuffer(
-  ab:       ArrayBuffer,
-  strings?: Record<string, string[] | string[][]>
-): Entity[] {
+export function reconstructFromArrayBuffer(ab: ArrayBuffer): Entity[] {
   const { meta, numRows, getValue } = decodeColumnsFromArrayBuffer(ab);
 
   const items: Entity[] = new Array(numRows);
   for (let ri = 0; ri < numRows; ri++) {
     const obj: Record<string, unknown> = {};
-    // Binary columns
     for (let ci = 0; ci < meta.length; ci++) {
       const col = meta[ci];
       const val = getValue(ci, ri);
       obj[col.name] = col.typeName === 'Bool' ? Boolean(val) : Number(val);
-    }
-    // String columns (if provided)
-    if (strings) {
-      for (const [field, arr] of Object.entries(strings)) {
-        obj[field] = arr[ri];
-      }
     }
     items[ri] = obj as Entity;
   }

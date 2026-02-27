@@ -2,7 +2,7 @@ import * as fs   from 'fs';
 import * as path from 'path';
 import { parseIQSchema, toSchemaNode, IQSchema } from '../../schema/iq-parser';
 import { reconstruct }                from '../core/binary-encoder';
-import { Entity, FacetData, Manifest, QueryOptions, QueryResult } from '../core/types';
+import { Entity, QueryOptions, QueryResult } from '../core/types';
 import { executeQuery }                from './query';
 import { now }                         from './utils';
 
@@ -22,7 +22,6 @@ export interface ClientConfig {
 export interface ClientStats {
   loadTimeMs:   number;
   itemCount:    number;
-  facetCount:   number;
   artifactsDir: string;
 }
 
@@ -30,8 +29,6 @@ export interface ClientStats {
 
 export class IndexQLClient {
   private items!:     Entity[];
-  private facetData!: FacetData;
-  private manifest!:  Manifest;
   private schema!:    IQSchema;
   private readonly artifactsDir: string;
   private readonly schemaFile:   string;
@@ -47,28 +44,18 @@ export class IndexQLClient {
   private loadSync(): void {
     const t0 = now();
 
-    // 1. Read manifest
-    const manifestPath = path.join(this.artifactsDir, 'manifest.json');
-    if (!fs.existsSync(manifestPath)) {
+    // 1. Load binary data
+    const binaryPath = path.join(this.artifactsDir, 'products.bin');
+    if (!fs.existsSync(binaryPath)) {
       throw new Error(
-        `IndexQL: manifest not found at ${manifestPath}.\n` +
+        `IndexQL: products.bin not found at ${binaryPath}.\n` +
         `Run "npm run build" to generate artifacts first.`
       );
     }
-    this.manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Manifest;
+    const binaryBuf = fs.readFileSync(binaryPath);
+    this.items      = reconstruct(binaryBuf);
 
-    // 2. Load binary data
-    const binaryPath  = path.join(this.artifactsDir, this.manifest.files.binary.name);
-    const stringsPath = path.join(this.artifactsDir, this.manifest.files.strings.name);
-    const binaryBuf   = fs.readFileSync(binaryPath);
-    const strings: Record<string, string[] | string[][]> = JSON.parse(fs.readFileSync(stringsPath, 'utf8'));
-    this.items        = reconstruct(binaryBuf, strings);
-
-    // 3. Load facets
-    const facetsPath = path.join(this.artifactsDir, this.manifest.files.facets.name);
-    this.facetData   = JSON.parse(fs.readFileSync(facetsPath, 'utf8')) as FacetData;
-
-    // 4. Parse IQ schema
+    // 2. Parse IQ schema
     const iqSrc   = fs.readFileSync(this.schemaFile, 'utf8');
     this.schema   = parseIQSchema(iqSrc);
 
@@ -76,7 +63,6 @@ export class IndexQLClient {
     this.stats = {
       loadTimeMs,
       itemCount:    this.items.length,
-      facetCount:   this.facetData.facets.length,
       artifactsDir: this.artifactsDir,
     };
   }
@@ -93,14 +79,6 @@ export class IndexQLClient {
   query(options: QueryOptions = {}): QueryResult {
     const node = toSchemaNode(this.schema);
     return executeQuery(this.items, options, { node });
-  }
-
-  getFacets(): FacetData['facets'] {
-    return this.facetData.facets;
-  }
-
-  getManifest(): Manifest {
-    return this.manifest;
   }
 
   getStats(): ClientStats {

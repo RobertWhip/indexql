@@ -28,7 +28,6 @@ export interface EntitySchema {
   collection:    string;
   columns:       ColumnDef[];
   binaryColumns: ColumnDef[];
-  stringColumns: ColumnDef[];
 }
 
 // ── Binary type registry (duplicated from iq-parser for zero internal deps) ──
@@ -127,9 +126,8 @@ export function getEntitySchema(cls: Function): EntitySchema {
 
   const columns       = Array.from(map.values());
   const binaryColumns = columns.filter(c => c.isBinary);
-  const stringColumns = columns.filter(c => !c.isBinary);
 
-  return { collection, columns, binaryColumns, stringColumns };
+  return { collection, columns, binaryColumns };
 }
 
 /**
@@ -157,11 +155,7 @@ export function encodeEntity<T>(cls: new () => T, items: T[]): Buffer {
  * Decode a binary ArrayBuffer into typed entities using a decorated class.
  * Browser-safe counterpart to encodeEntity.
  */
-export function parseEntity<T>(
-  cls: new () => T,
-  ab: ArrayBuffer,
-  strings?: Record<string, string[] | string[][]>
-): T[] {
+export function parseEntity<T>(cls: new () => T, ab: ArrayBuffer): T[] {
   getEntitySchema(cls); // validate decorated class
-  return reconstructFromArrayBuffer(ab, strings) as unknown as T[];
+  return reconstructFromArrayBuffer(ab) as unknown as T[];
 }

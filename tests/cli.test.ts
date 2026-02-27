@@ -1,12 +1,8 @@
-import * as fs   from 'fs';
-import * as path from 'path';
-import * as os   from 'os';
 import { hashString, fmtBytes, fmtMs }                from '../src/cli/utils';
-import { encodeColumns, decodeColumns, reconstruct, ColumnMeta } from '../src/core/binary-encoder';
+import { encodeColumns, decodeColumns, ColumnMeta }    from '../src/core/binary-encoder';
 import { normalizeAll }                                from '../src/core/normalizer';
 import { computeFacets }                               from '../src/core/facet';
 import { parseSchema, getNode }                        from '../schema/parser';
-import { Entity, FacetData, Manifest }                 from '../src/core/types';
 import { run, assert, assertEq }                       from './runner';
 
 // ── Hash ──────────────────────────────────────────────────────────────────────
@@ -106,70 +102,3 @@ run('Pipeline: normalize → facet → encodeColumns → reconstruct round-trip'
   assert(Math.abs(price0 - 29.99) < 0.01, `price[0] ≈ 29.99, got ${price0}`);
 });
 
-run('Pipeline: strings.json written and parsed back correctly', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'indexql-strings-'));
-  try {
-    const schema = parseSchema(SDL);
-    const node   = getNode(schema, 'products');
-    const items  = normalizeAll(RAW_ITEMS as Record<string, unknown>[], node);
-
-    // Build strings object (string fields only)
-    const strFields = ['id', 'name', 'category', 'brand', 'description', 'tags'];
-    const stringsObj: Record<string, unknown[]> = {};
-    for (const field of strFields) {
-      stringsObj[field] = items.map(item => item[field]);
-    }
-
-    const stringsPath = path.join(tmpDir, 'strings.json');
-    fs.writeFileSync(stringsPath, JSON.stringify(stringsObj), 'utf8');
-
-    const loaded = JSON.parse(fs.readFileSync(stringsPath, 'utf8')) as Record<string, string[]>;
-    assertEq(loaded['id'].length,       3,         '3 IDs in strings.json');
-    assertEq(loaded['id'][0],           'a1',      'first ID is a1');
-    assertEq(loaded['category'][0],     'Tools',   'first category is Tools');
-    assertEq(loaded['brand'][1],        'Acme',    'second brand is Acme');
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true });
-  }
-});
-
-run('Pipeline: manifest references binary + strings.json with correct fields', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'indexql-manifest-'));
-  try {
-    const schema = parseSchema(SDL);
-    const node   = getNode(schema, 'products');
-    const items  = normalizeAll(RAW_ITEMS as Record<string, unknown>[], node);
-    const facets = computeFacets(items, node);
-    const facetData: FacetData = { facets, generatedAt: new Date().toISOString(), schema: '2.0.0' };
-
-    const buf     = encodeColumns(items, BINARY_COLS);
-    const stringsJson = JSON.stringify({ id: items.map(item => item['id']) });
-
-    const manifest: Manifest = {
-      version:     '2.0.0',
-      schema:      hashString(SDL),
-      generatedAt: new Date().toISOString(),
-      numItems:    items.length,
-      files: {
-        binary:  { name: 'products.bin',  hash: hashString(buf.toString('base64')),   sizeBytes: buf.byteLength,                          count: items.length },
-        strings: { name: 'strings.json',  hash: hashString(stringsJson),               sizeBytes: Buffer.byteLength(stringsJson, 'utf8') },
-        facets:  { name: 'facets.json',   hash: hashString(JSON.stringify(facetData)), sizeBytes: Buffer.byteLength(JSON.stringify(facetData), 'utf8') },
-      },
-    };
-
-    const manifestPath = path.join(tmpDir, 'manifest.json');
-    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-    const loaded = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Manifest;
-
-    assertEq(loaded.version,                '2.0.0', 'version is 2.0.0');
-    assertEq(loaded.numItems,              3,       'numItems = 3');
-    assertEq(loaded.files.binary.name,     'products.bin', 'binary file is products.bin');
-    assertEq(loaded.files.strings.name,    'strings.json', 'strings file is strings.json');
-    assertEq(loaded.files.facets.name,     'facets.json',  'facets file is facets.json');
-    assertEq(loaded.files.binary.count,    3,       'item count in manifest');
-    assert(typeof loaded.schema === 'string',         'schema hash is string');
-    assert(typeof loaded.generatedAt === 'string',    'generatedAt is string');
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true });
-  }
-});

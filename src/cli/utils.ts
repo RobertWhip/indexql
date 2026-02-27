@@ -1,6 +1,5 @@
 import * as fs   from 'fs';
 import * as path from 'path';
-import { ArtifactFile } from '../core/types';
 
 // Re-export formatting utilities so existing consumers don't break
 export { log, fmtBytes, fmtMs } from '../fmt';
@@ -26,47 +25,16 @@ export function hashString(input: string): string {
 
 // ── File I/O ──────────────────────────────────────────────────────────────────
 
-/** Write a Buffer to a binary file; returns ArtifactFile metadata. */
+/** Write a Buffer to a binary file; returns name + size metadata. */
 export function writeBinaryArtifact(
   dir: string,
   filename: string,
   data: Buffer,
-  count?: number
-): ArtifactFile {
+): { name: string; sizeBytes: number } {
   fs.mkdirSync(dir, { recursive: true });
   const filePath = path.join(dir, filename);
   fs.writeFileSync(filePath, data);
-  return {
-    name:      filename,
-    hash:      hashString(data.toString('base64')),
-    sizeBytes: data.byteLength,
-    ...(count !== undefined && { count }),
-  };
-}
-
-/** Write a JSON-serializable value to a file; returns ArtifactFile metadata. */
-export function writeJsonArtifact(
-  dir: string,
-  filename: string,
-  value: unknown,
-  count?: number
-): ArtifactFile {
-  fs.mkdirSync(dir, { recursive: true });
-  const filePath = path.join(dir, filename);
-  const json = JSON.stringify(value);
-  fs.writeFileSync(filePath, json, 'utf8');
-  return {
-    name:      filename,
-    hash:      hashString(json),
-    sizeBytes: Buffer.byteLength(json, 'utf8'),
-    ...(count !== undefined && { count }),
-  };
-}
-
-/** Read and parse a JSON file. */
-export function readJson<T>(filePath: string): T {
-  const raw = fs.readFileSync(filePath, 'utf8');
-  return JSON.parse(raw) as T;
+  return { name: filename, sizeBytes: data.byteLength };
 }
 
 /** Check whether a file exists. */

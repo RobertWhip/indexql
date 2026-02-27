@@ -68,33 +68,6 @@ export interface RangeFacet {
 
 export type Facet = TermsFacet | RangeFacet;
 
-export interface FacetData {
-  facets: Facet[];
-  generatedAt: string;
-  schema: string;
-}
-
-// ── Artifact Types ────────────────────────────────────────────────────────────
-
-export interface ArtifactFile {
-  name: string;
-  hash: string;
-  sizeBytes: number;
-  count?: number;
-}
-
-export interface Manifest {
-  version: string;
-  schema: string;
-  generatedAt: string;
-  numItems: number;
-  files: {
-    binary:  ArtifactFile;   // *.bin (column-major binary)
-    strings: ArtifactFile;   // strings.json
-    facets:  ArtifactFile;   // facets.json
-  };
-}
-
 // ── Query Types ───────────────────────────────────────────────────────────────
 
 /**

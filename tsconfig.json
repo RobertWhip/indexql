@@ -15,6 +15,6 @@
     "experimentalDecorators": true,
     "types": ["node"]
   },
-  "include": ["src/**/*", "schema/**/*", "data/**/*", "tests/**/*"],
+  "include": ["src/**/*", "data/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist", "artifacts"]
 }

@@ -1,5 +1,5 @@
 import { encodeColumns, reconstructFromArrayBuffer, type ColumnMeta } from './binary-encoder';
-import type { Entity as EntityType } from './types';
+import type { Entity as EntityType, SchemaNode, SchemaField } from './types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -21,6 +21,7 @@ export interface ColumnDef {
   type:        DataType | null;   // IQ type: 'Float32', 'String', 'Bool', etc.
   bits:        number | null;
   isBinary:    boolean;
+  isList?:     boolean;
   facet?:      FacetKind;
 }
 
@@ -30,7 +31,7 @@ export interface EntitySchema {
   binaryColumns: ColumnDef[];
 }
 
-// ── Binary type registry (duplicated from iq-parser for zero internal deps) ──
+// ── Binary type registry ──────────────────────────────────────────────────────
 
 const BINARY_TYPES: Record<string, number> = {
   Bool:    8,
@@ -87,8 +88,9 @@ export function Column(options: { type: DataType, isArray?: boolean }): Property
       existing.type     = type;
       existing.bits     = bits;
       existing.isBinary = isBinary;
+      existing.isList   = !!isArray;
     } else {
-      map.set(key, { propertyKey: key, type, bits, isBinary });
+      map.set(key, { propertyKey: key, type, bits, isBinary, isList: !!isArray });
     }
   };
 }
@@ -158,4 +160,24 @@ export function encodeEntity<T>(cls: new () => T, items: T[]): Buffer {
 export function parseEntity<T>(cls: new () => T, ab: ArrayBuffer): T[] {
   getEntitySchema(cls); // validate decorated class
   return reconstructFromArrayBuffer(ab) as unknown as T[];
+}
+
+// ── Schema bridge ──────────────────────────────────────────────────────────────
+
+/**
+ * Convert an EntitySchema into a SchemaNode for downstream code
+ * (normalizer, facets, query engine).
+ */
+export function toSchemaNode(schema: EntitySchema): SchemaNode {
+  const fields: SchemaField[] = schema.columns.map(c => ({
+    name:       c.propertyKey,
+    type:       c.type ?? 'String',
+    nullable:   true,
+    isList:     !!c.isList,
+    isRequired: false,
+    directives: c.facet
+      ? [{ name: 'facet', args: { type: c.facet } }]
+      : [],
+  }));
+  return { typeName: schema.collection, collection: schema.collection, fields };
 }

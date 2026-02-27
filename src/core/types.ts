@@ -26,12 +26,6 @@ export interface SchemaNode {
   fields: SchemaField[];
 }
 
-export interface ParsedSchema {
-  nodes: SchemaNode[];
-  directives: string[];
-  enums: Record<string, string[]>;
-}
-
 // ── Entity Type ──────────────────────────────────────────────────────────────
 
 /** Generic entity record — the base shape for any indexed collection. */

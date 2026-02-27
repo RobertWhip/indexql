@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm test              # Run all tests (64 tests, zero-dep runner via ts-node)
-npm run build         # Build artifacts/ (products.bin) from data/products.json + schema/indexql.iq
+npm test              # Run all tests (53 tests, zero-dep runner via ts-node)
+npm run build         # Build artifacts/ (products.bin) from data/products.json + decorator entity
 npm run inspect       # Inspect built artifacts (column layout, sample items)
 npm run seed          # Regenerate data/products.json (15k items)
 npm run build:ts      # TypeScript compilation only
@@ -21,15 +21,14 @@ IndexQL is an **entity-agnostic**, schema-driven indexing library. It compiles s
 ### Data flow
 
 ```
-.iq schema → normalizer → binary encoder → products.bin
-                                                ↓
-                                        IndexQLClient.load() → query() → results
+@Entity class → toSchemaNode() → normalizer → binary encoder → products.bin
+                                                                     ↓
+                                                             IndexQLClient.load() → query() → results
 ```
 
 ### Key modules
 
-- **Schema parser** (`schema/iq-parser.ts`) — Parses `.iq` files into `IQSchema`. Defines field types (`Bool`, `Int8/16/32/64`, `Float32/64`, `String`, `String[]`) and directives (`@facet(RANGE|TERMS)`, `@collection(name)`).
-- **Entity decorators** (`src/core/entity.ts`) — `@Entity`, `@Column`, `@Facet` decorators for class-based schema definition. `getEntitySchema()` extracts metadata, `toBinaryColumnMetas()` converts for the encoder.
+- **Entity decorators** (`src/core/entity.ts`) — `@Entity`, `@Column`, `@Facet` decorators for class-based schema definition. `getEntitySchema()` extracts metadata, `toBinaryColumnMetas()` converts for the encoder, `toSchemaNode()` bridges to the internal `SchemaNode` representation.
 - **Binary encoder** (`src/core/binary-encoder.ts`) — Column-major IQBN format. `encodeColumns()` / `decodeColumns()` for Node; `decodeColumnsFromArrayBuffer()` / `reconstructFromArrayBuffer()` for browser. `reconstruct(buf)` decodes binary-only entities.
 - **Query engine** (`src/client/query.ts`) — Convention-based filter: `*Min`/`*Max` → range, `search` → full-text substring, `string[]` → set match, `boolean` → exact match.
 - **Client SDK** (`src/client/indexqlClient.ts`) — `IndexQLClient.load()` synchronously loads artifacts; `.query()` filters/sorts/paginates locally.
@@ -50,7 +49,7 @@ Magic `IQBN`, version `0x01`, little-endian, column-major layout. Only numeric/b
 
 Tests use a custom zero-dependency runner (`tests/runner.ts`) with `run()`, `assert()`, `assertEq()`, `assertThrows()`. Test files:
 
-- `tests/core.test.ts` — Binary encode/decode roundtrip, IQ parser, normalizer, facets
+- `tests/core.test.ts` — Binary encode/decode roundtrip, normalizer, facets
 - `tests/client.test.ts` — Query filtering, sorting, pagination, hooks, projections
 - `tests/cli.test.ts` — Build pipeline integration, hashing, formatting
 
@@ -58,5 +57,5 @@ Tests use a custom zero-dependency runner (`tests/runner.ts`) with `run()`, `ass
 
 - `experimentalDecorators: true` is required in tsconfig (used by entity decorators)
 - Node.js >= 18.0.0
-- Core modules (`src/core/`, `src/client/`, `schema/`) must remain domain-agnostic — no product references
+- Core modules (`src/core/`, `src/client/`) must remain domain-agnostic — no product references
 - The demo app (`demo/product-catalog/`) has its own `package.json` and uses Docker (Postgres 16 + Redis 7)

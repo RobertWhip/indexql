@@ -2,35 +2,48 @@ import { executeQuery }                           from '../src/client/query';
 import { project, toSet, matchesSet } from '../src/client/utils';
 import { createQueryHook, toggleFacetValue }      from '../src/client/hooks';
 import { IndexQLClient }                          from '../src/client/indexqlClient';
-import { parseSchema, getNode }                   from '../schema/parser';
-import { Entity }                                 from '../src/core/types';
+import { Entity, Column, Facet, DataType, getEntitySchema, toSchemaNode } from '../src/core/entity';
+import { Entity as EntityType }                   from '../src/core/types';
 import { run, assert, assertEq, assertThrows }    from './runner';
 
-// ── Fixtures ──────────────────────────────────────────────────────────────────
+// ── Fixture: decorated entity class ──────────────────────────────────────────
 
-const SDL = `
-  directive @node(collection: String!) on OBJECT
-  directive @facet(type: FacetType!) on FIELD_DEFINITION
-  directive @sortable on FIELD_DEFINITION
-  directive @filterable on FIELD_DEFINITION
-  enum FacetType { TERMS RANGE }
-  type Product @node(collection: "products") {
-    id: ID!
-    name: String! @filterable
-    price: Float! @facet(type: RANGE) @sortable
-    category: String! @facet(type: TERMS)
-    brand: String! @facet(type: TERMS)
-    rating: Float
-    inStock: Boolean
-    tags: [String]
-    description: String
-  }
-`;
+@Entity('products')
+class TestProduct {
+  @Column({ type: DataType.String })
+  id!: string;
 
-const schema = parseSchema(SDL);
-const node   = getNode(schema, 'products');
+  @Column({ type: DataType.String })
+  name!: string;
 
-const ITEMS: Entity[] = [
+  @Column({ type: DataType.Float32 })
+  @Facet('RANGE')
+  price!: number;
+
+  @Column({ type: DataType.String })
+  @Facet('TERMS')
+  category!: string;
+
+  @Column({ type: DataType.String })
+  @Facet('TERMS')
+  brand!: string;
+
+  @Column({ type: DataType.Float32 })
+  rating!: number;
+
+  @Column({ type: DataType.Bool })
+  inStock!: boolean;
+
+  @Column({ type: DataType.String, isArray: true })
+  tags!: string[];
+
+  @Column({ type: DataType.String })
+  description!: string;
+}
+
+const node = toSchemaNode(getEntitySchema(TestProduct));
+
+const ITEMS: EntityType[] = [
   { id: 'p1', name: 'iPhone 15',     price: 999, category: 'Electronics', brand: 'Apple', rating: 4.8, inStock: true,  tags: ['smartphone'],      description: 'Latest iPhone' },
   { id: 'p2', name: 'AirPods Pro',   price: 249, category: 'Electronics', brand: 'Apple', rating: 4.7, inStock: true,  tags: ['earbuds','anc'],    description: 'Wireless earbuds' },
   { id: 'p3', name: 'Galaxy S24',    price: 849, category: 'Electronics', brand: 'Samsung',rating:4.6, inStock: false, tags: ['smartphone'],       description: 'Android flagship' },
@@ -52,7 +65,7 @@ run('Query: no filter returns all items', () => {
 run('Query: filter by single category', () => {
   const r = executeQuery(ITEMS, { filter: { category: 'Electronics' } });
   assertEq(r.meta.total, 3, '3 Electronics items');
-  assert(r.data.every(item => (item as Entity).category === 'Electronics'), 'all results are Electronics');
+  assert(r.data.every(item => (item as EntityType).category === 'Electronics'), 'all results are Electronics');
 });
 
 run('Query: filter by category array', () => {
@@ -68,7 +81,7 @@ run('Query: filter by brand array', () => {
 run('Query: filter by price range', () => {
   const r = executeQuery(ITEMS, { filter: { priceMin: 100, priceMax: 500 } });
   r.data.forEach(item => {
-    const price = Number((item as Entity).price);
+    const price = Number((item as EntityType).price);
     assert(price >= 100 && price <= 500, 'price in range');
   });
 });
@@ -77,20 +90,20 @@ run('Query: filter by inStock', () => {
   const inStock  = executeQuery(ITEMS, { filter: { inStock: true  } });
   const outStock = executeQuery(ITEMS, { filter: { inStock: false } });
   assertEq(inStock.meta.total + outStock.meta.total, ITEMS.length, 'totals add up');
-  assert(inStock.data.every( item => (item as Entity).inStock === true),  'all in stock');
-  assert(outStock.data.every(item => (item as Entity).inStock === false), 'all out of stock');
+  assert(inStock.data.every( item => (item as EntityType).inStock === true),  'all in stock');
+  assert(outStock.data.every(item => (item as EntityType).inStock === false), 'all out of stock');
 });
 
 run('Query: filter by rating range', () => {
   const r = executeQuery(ITEMS, { filter: { ratingMin: 4.7 } });
-  r.data.forEach(item => assert(Number((item as Entity).rating) >= 4.7, 'rating >= 4.7'));
+  r.data.forEach(item => assert(Number((item as EntityType).rating) >= 4.7, 'rating >= 4.7'));
 });
 
 run('Query: full-text search (case-insensitive)', () => {
   const r = executeQuery(ITEMS, { filter: { search: 'wireless' } });
   assert(r.meta.total >= 1, 'at least one result for "wireless"');
   r.data.forEach(item => {
-    const hay = `${(item as Entity).name} ${(item as Entity).description}`.toLowerCase();
+    const hay = `${(item as EntityType).name} ${(item as EntityType).description}`.toLowerCase();
     assert(hay.includes('wireless'), 'search term in name or description');
   });
 });
@@ -112,14 +125,14 @@ run('Query: combined filter', () => {
 run('Query: sort price ascending', () => {
   const r = executeQuery(ITEMS, { sort: { field: 'price', order: 'asc' } });
   for (let i = 1; i < r.data.length; i++) {
-    assert((r.data[i-1] as Entity).price <= (r.data[i] as Entity).price, 'ascending price order');
+    assert((r.data[i-1] as EntityType).price <= (r.data[i] as EntityType).price, 'ascending price order');
   }
 });
 
 run('Query: sort price descending', () => {
   const r = executeQuery(ITEMS, { sort: { field: 'price', order: 'desc' } });
   for (let i = 1; i < r.data.length; i++) {
-    assert((r.data[i-1] as Entity).price >= (r.data[i] as Entity).price, 'descending price order');
+    assert((r.data[i-1] as EntityType).price >= (r.data[i] as EntityType).price, 'descending price order');
   }
 });
 
@@ -127,7 +140,7 @@ run('Query: sort name ascending', () => {
   const r = executeQuery(ITEMS, { sort: { field: 'name', order: 'asc' } });
   for (let i = 1; i < r.data.length; i++) {
     assert(
-      ((r.data[i-1] as Entity).name as string).localeCompare((r.data[i] as Entity).name as string) <= 0,
+      ((r.data[i-1] as EntityType).name as string).localeCompare((r.data[i] as EntityType).name as string) <= 0,
       'ascending name order'
     );
   }

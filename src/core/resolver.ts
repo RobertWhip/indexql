@@ -1,5 +1,4 @@
-import { ParsedSchema, SchemaNode, Entity } from './types';
-import { getNode } from '../../schema/parser';
+import { SchemaNode, Entity } from './types';
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 
@@ -24,10 +23,10 @@ export function registerCollection(
 
 export class Resolver {
   private registry: CollectionRegistry;
-  private schema: ParsedSchema;
+  private nodes: Map<string, SchemaNode>;
 
-  constructor(schema: ParsedSchema, registry: CollectionRegistry) {
-    this.schema = schema;
+  constructor(nodes: Map<string, SchemaNode>, registry: CollectionRegistry) {
+    this.nodes = nodes;
     this.registry = registry;
   }
 
@@ -45,7 +44,9 @@ export class Resolver {
 
   /** Return the SchemaNode for a collection. */
   nodeFor(collection: string): SchemaNode {
-    return getNode(this.schema, collection);
+    const node = this.nodes.get(collection);
+    if (!node) throw new Error(`No schema node found for collection "${collection}"`);
+    return node;
   }
 
   /** List all registered collection names. */
@@ -54,14 +55,14 @@ export class Resolver {
   }
 }
 
-/** Convenience factory: build a Resolver from schema + data map. */
+/** Convenience factory: build a Resolver from nodes map + data map. */
 export function createResolver(
-  schema: ParsedSchema,
+  nodes: Map<string, SchemaNode>,
   data: Record<string, Entity[]>
 ): Resolver {
   const registry = createRegistry();
   for (const [collection, items] of Object.entries(data)) {
     registerCollection(registry, collection, items);
   }
-  return new Resolver(schema, registry);
+  return new Resolver(nodes, registry);
 }

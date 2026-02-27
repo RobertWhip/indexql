@@ -1,5 +1,9 @@
-import { Entity, SchemaNode, Facet, TermsFacet, RangeFacet, RangeBucket } from './types';
-import { fieldsWithDirective } from '../../schema/parser';
+import { Entity, SchemaNode, SchemaField, Facet, TermsFacet, RangeFacet, RangeBucket } from './types';
+
+/** Return all fields on a node that carry a given directive. */
+function fieldsWithDirective(node: SchemaNode, directiveName: string): SchemaField[] {
+  return node.fields.filter(f => f.directives.some(d => d.name === directiveName));
+}
 
 // ── TERMS Facet ───────────────────────────────────────────────────────────────
 

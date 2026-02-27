@@ -2,7 +2,7 @@ import { hashString, fmtBytes, fmtMs }                from '../src/cli/utils';
 import { encodeColumns, decodeColumns, ColumnMeta }    from '../src/core/binary-encoder';
 import { normalizeAll }                                from '../src/core/normalizer';
 import { computeFacets }                               from '../src/core/facet';
-import { parseSchema, getNode }                        from '../schema/parser';
+import { Entity, Column, Facet, DataType, getEntitySchema, toSchemaNode } from '../src/core/entity';
 import { run, assert, assertEq }                       from './runner';
 
 // ── Hash ──────────────────────────────────────────────────────────────────────
@@ -43,26 +43,42 @@ run('fmtMs: normal', () => {
   assertEq(fmtMs(12.345), '12.35 ms', '12.35 ms');
 });
 
-// ── SDL fixture (for normalizer / facet compatibility) ─────────────────────────
+// ── Decorator entity fixture ─────────────────────────────────────────────────
 
-const SDL = `
-  directive @node(collection: String!) on OBJECT
-  directive @facet(type: FacetType!) on FIELD_DEFINITION
-  directive @sortable on FIELD_DEFINITION
-  directive @filterable on FIELD_DEFINITION
-  enum FacetType { TERMS RANGE }
-  type Product @node(collection: "products") {
-    id: ID!
-    name: String!
-    price: Float! @facet(type: RANGE) @sortable
-    category: String! @facet(type: TERMS)
-    brand: String! @facet(type: TERMS)
-    rating: Float
-    inStock: Boolean
-    tags: [String]
-    description: String
-  }
-`;
+@Entity('products')
+class TestProduct {
+  @Column({ type: DataType.String })
+  id!: string;
+
+  @Column({ type: DataType.String })
+  name!: string;
+
+  @Column({ type: DataType.Float32 })
+  @Facet('RANGE')
+  price!: number;
+
+  @Column({ type: DataType.String })
+  @Facet('TERMS')
+  category!: string;
+
+  @Column({ type: DataType.String })
+  @Facet('TERMS')
+  brand!: string;
+
+  @Column({ type: DataType.Float32 })
+  rating!: number;
+
+  @Column({ type: DataType.Bool })
+  inStock!: boolean;
+
+  @Column({ type: DataType.String, isArray: true })
+  tags!: string[];
+
+  @Column({ type: DataType.String })
+  description!: string;
+}
+
+const node = toSchemaNode(getEntitySchema(TestProduct));
 
 const RAW_ITEMS = [
   { id: 'a1', name: 'Widget A', price: '29.99', category: 'Tools', brand: 'Acme', rating: 4.2, inStock: 'true',  tags: ['hand-tool'],  description: 'A fine widget' },
@@ -79,9 +95,7 @@ const BINARY_COLS: ColumnMeta[] = [
 // ── Build Pipeline Integration ────────────────────────────────────────────────
 
 run('Pipeline: normalize → facet → encodeColumns → reconstruct round-trip', () => {
-  const schema = parseSchema(SDL);
-  const node   = getNode(schema, 'products');
-  const items  = normalizeAll(RAW_ITEMS as Record<string, unknown>[], node);
+  const items = normalizeAll(RAW_ITEMS as Record<string, unknown>[], node);
 
   assertEq(items.length,       3,     '3 items normalized');
   assertEq(items[0]['price'],  29.99, 'price coerced from string');
@@ -101,4 +115,3 @@ run('Pipeline: normalize → facet → encodeColumns → reconstruct round-trip'
   const price0   = Number(decoded.getValue(priceIdx, 0));
   assert(Math.abs(price0 - 29.99) < 0.01, `price[0] ≈ 29.99, got ${price0}`);
 });
-

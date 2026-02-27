@@ -1,14 +1,49 @@
 import * as fs   from 'fs';
 import * as path from 'path';
-import { parseIQSchema, binaryFields, toSchemaNode } from '../../schema/iq-parser';
+import { Entity, Column, Facet, DataType, getEntitySchema, toBinaryColumnMetas, toSchemaNode } from '../core/entity';
 import { normalizeAll }                from '../core/normalizer';
 import { encodeColumns }               from '../core/binary-encoder';
 import { writeBinaryArtifact, log, fmtBytes } from './utils';
 
+// ── Entity definition (matches data/products.json shape) ─────────────────────
+
+@Entity('products')
+class Product {
+  @Column({ type: DataType.String })
+  id!: string;
+
+  @Column({ type: DataType.String })
+  name!: string;
+
+  @Column({ type: DataType.Float32 })
+  @Facet('RANGE')
+  price!: number;
+
+  @Column({ type: DataType.String })
+  @Facet('TERMS')
+  category!: string;
+
+  @Column({ type: DataType.String })
+  @Facet('TERMS')
+  brand!: string;
+
+  @Column({ type: DataType.Float32 })
+  @Facet('RANGE')
+  rating!: number;
+
+  @Column({ type: DataType.Bool })
+  inStock!: boolean;
+
+  @Column({ type: DataType.String, isArray: true })
+  tags!: string[];
+
+  @Column({ type: DataType.String })
+  description!: string;
+}
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const ROOT          = path.resolve(__dirname, '..', '..');
-const SCHEMA_FILE   = path.join(ROOT, 'schema', 'indexql.iq');
 const DATA_FILE     = path.join(ROOT, 'data',   'products.json');
 const ARTIFACTS_DIR = path.join(ROOT, 'artifacts');
 
@@ -34,11 +69,11 @@ async function build(): Promise<void> {
   log.blank();
 
   // ── 1. Schema ──────────────────────────────────────────────────────────────
-  log.info('Parsing schema…');
-  const iqSrc    = fs.readFileSync(SCHEMA_FILE, 'utf8');
-  const iqSchema = parseIQSchema(iqSrc);
-  const binCols  = binaryFields(iqSchema);
-  log.success(`Schema parsed: ${iqSchema.fields.length} fields  (${binCols.length} binary)`);
+  log.info('Reading entity schema…');
+  const schema     = getEntitySchema(Product);
+  const columnMetas = toBinaryColumnMetas(schema);
+  const node       = toSchemaNode(schema);
+  log.success(`Schema: ${schema.columns.length} fields  (${columnMetas.length} binary)`);
 
   // ── 2. Load & Normalize ────────────────────────────────────────────────────
   log.info('Loading data…');
@@ -46,13 +81,11 @@ async function build(): Promise<void> {
   log.success(`Loaded ${rawRecords.length} raw records`);
 
   log.info('Normalizing…');
-  const node  = toSchemaNode(iqSchema);
   const items = normalizeAll(rawRecords, node);
   log.success(`Normalized ${items.length} items`);
 
   // ── 3. Encode binary columns ───────────────────────────────────────────────
   log.info('Encoding binary columns…');
-  const columnMetas = binCols.map(f => ({ name: f.name, typeName: f.typeName, bits: f.bits! }));
   const binaryBuf = encodeColumns(items, columnMetas);
   log.success(`Binary encoded: ${fmtBytes(binaryBuf.byteLength)} (${items.length} × ${columnMetas.length} cols)`);
 

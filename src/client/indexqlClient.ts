@@ -1,8 +1,8 @@
 import * as fs   from 'fs';
 import * as path from 'path';
-import { parseIQSchema, toSchemaNode, IQSchema } from '../../schema/iq-parser';
+import { getEntitySchema, toSchemaNode } from '../core/entity';
 import { reconstruct }                from '../core/binary-encoder';
-import { Entity, QueryOptions, QueryResult } from '../core/types';
+import { Entity, SchemaNode, QueryOptions, QueryResult } from '../core/types';
 import { executeQuery }                from './query';
 import { now }                         from './utils';
 
@@ -10,13 +10,13 @@ import { now }                         from './utils';
 
 const ROOT          = path.resolve(__dirname, '..', '..');
 const ARTIFACTS_DIR = path.join(ROOT, 'artifacts');
-const SCHEMA_FILE   = path.join(ROOT, 'schema', 'indexql.iq');
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface ClientConfig {
   artifactsDir?: string;
-  schemaFile?:   string;
+  /** Decorated entity class — used to derive the schema for facet computation. */
+  entity?:       Function;
 }
 
 export interface ClientStats {
@@ -28,15 +28,15 @@ export interface ClientStats {
 // ── IndexQL Client ────────────────────────────────────────────────────────────
 
 export class IndexQLClient {
-  private items!:     Entity[];
-  private schema!:    IQSchema;
+  private items!:      Entity[];
+  private schemaNode?: SchemaNode;
   private readonly artifactsDir: string;
-  private readonly schemaFile:   string;
-  private stats!:     ClientStats;
+  private readonly entityClass?: Function;
+  private stats!:      ClientStats;
 
   private constructor(config: ClientConfig = {}) {
     this.artifactsDir = config.artifactsDir ?? ARTIFACTS_DIR;
-    this.schemaFile   = config.schemaFile   ?? SCHEMA_FILE;
+    this.entityClass  = config.entity;
   }
 
   // ── Initialization ─────────────────────────────────────────────────────────
@@ -55,9 +55,11 @@ export class IndexQLClient {
     const binaryBuf = fs.readFileSync(binaryPath);
     this.items      = reconstruct(binaryBuf);
 
-    // 2. Parse IQ schema
-    const iqSrc   = fs.readFileSync(this.schemaFile, 'utf8');
-    this.schema   = parseIQSchema(iqSrc);
+    // 2. Derive schema node from entity class (if provided)
+    if (this.entityClass) {
+      const schema = getEntitySchema(this.entityClass);
+      this.schemaNode = toSchemaNode(schema);
+    }
 
     const loadTimeMs = now() - t0;
     this.stats = {
@@ -77,8 +79,7 @@ export class IndexQLClient {
   // ── Query API ──────────────────────────────────────────────────────────────
 
   query(options: QueryOptions = {}): QueryResult {
-    const node = toSchemaNode(this.schema);
-    return executeQuery(this.items, options, { node });
+    return executeQuery(this.items, options, this.schemaNode ? { node: this.schemaNode } : undefined);
   }
 
   getStats(): ClientStats {

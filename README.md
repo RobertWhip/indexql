@@ -8,14 +8,14 @@ Pre-build a compact binary artifact at deploy time, ship it to the client via CD
 schema/indexql.iq          .iq schema (types + directives)
         │
         ▼
-  data/products.json ──► normalizer ──► Product[]
+  data/products.json ──► normalizer ──► Entity[]
                                            │
                           facet.ts ◄───────┤
                     binary-encoder.ts ◄────┤
                                            ▼
                          artifacts/  ◄── build.ts (CLI)
                          ├ manifest.json     build metadata + file hashes
-                         ├ products.bin      column-major binary (~132 KB for 15k products)
+                         ├ products.bin      column-major binary (~132 KB for 15k items)
                          ├ strings.json      parallel string arrays (~2.5 MB)
                          └ facets.json       pre-computed facets (~3.5 KB)
                                            │
@@ -34,9 +34,9 @@ schema/indexql.iq          .iq schema (types + directives)
 ## Folder Structure
 
 ```
-indexql-mvp/
+facetql/
 ├── data/
-│   ├── products.json            15,000 seeded products (LCG seed=42)
+│   ├── products.json            15,000 seeded items (LCG seed=42)
 │   └── seed.ts                  Regenerates products.json
 │
 ├── schema/
@@ -56,6 +56,7 @@ indexql-mvp/
 │   │
 │   ├── core/
 │   │   ├── types.ts             All shared TypeScript types
+│   │   ├── entity.ts            @Entity/@Column/@Facet decorators
 │   │   ├── binary-encoder.ts    Column-major encode/decode
 │   │   ├── normalizer.ts        Schema-driven record normalization
 │   │   ├── facet.ts             TERMS + RANGE facet computation
@@ -67,12 +68,13 @@ indexql-mvp/
 │   │   ├── hooks.ts             Framework-agnostic reactive query hooks
 │   │   └── utils.ts             Client utilities
 │   │
-│   └── demo/
-│       ├── indexqlDemo.ts       IndexQL local demo (Queries A–D)
-│       ├── httpDemo.ts          Real PostgreSQL benchmark
-│       ├── setupDb.ts           PostgreSQL table + indexes setup
-│       ├── setupRedis.ts        Redis pipeline loader
-│       └── redisServer.ts       HTTP proxy for Redis batch fetches
+│   └── fmt.ts                   ANSI formatting + logging utilities
+│
+├── demo/
+│   └── product-catalog/         Full-stack demo (see demo/README.md)
+│       ├── shared/              Decorator-based entity definition
+│       ├── server/              Express + PostgreSQL + Redis
+│       └── client/              Vite + React
 │
 ├── tests/
 │   ├── runner.ts                Zero-dependency test runner
@@ -80,7 +82,6 @@ indexql-mvp/
 │   ├── client.test.ts           Query engine, hooks, projection tests
 │   └── cli.test.ts              Pipeline integration tests
 │
-├── docker-compose.yml           PostgreSQL 16 + Redis 7
 ├── package.json
 └── tsconfig.json
 ```
@@ -94,18 +95,10 @@ npm install
 ## Commands
 
 ```bash
-npm run seed               # Regenerate data/products.json (15k products, LCG seed=42)
+npm run seed               # Regenerate data/products.json (15k items, LCG seed=42)
 npm run build              # Build artifacts/ (products.bin, strings.json, facets.json)
-npm run inspect            # Inspect artifacts (column layout, facets, sample products)
-npm run demo:indexql       # IndexQL local demo (Queries A–D)
-npm run demo:http          # Real PostgreSQL benchmark (needs docker:up + setup-db)
-npm run demo:compare       # Runs both demos sequentially
-npm run docker:up          # Start PostgreSQL 16 + Redis 7
-npm run docker:down        # Stop services
-npm run setup-db           # Create table + 8 indexes + insert 15k rows
-npm run setup-redis        # Pipeline SET product:{id} into Redis
-npm run start-redis-server # HTTP proxy on port 3001 for Redis batch fetches
-npm test                   # 65 tests
+npm run inspect            # Inspect artifacts (column layout, facets, sample items)
+npm test                   # 66 tests
 ```
 
 ## Schema (.iq format)
@@ -135,8 +128,30 @@ String fields (`String`, `String[]`) go to `strings.json` as parallel arrays.
 | Float32/Float64 | 32/64 | products.bin |
 | String / String[] | — | strings.json |
 
-Current stride: `price`(4) + `rating`(4) + `inStock`(1) = **9 bytes/product**.
-15,000 products → **~132 KB** binary (vs ~5 MB as JSON).
+Current stride: `price`(4) + `rating`(4) + `inStock`(1) = **9 bytes/item**.
+15,000 items → **~132 KB** binary (vs ~5 MB as JSON).
+
+## Entity Decorators
+
+Define entities with decorators instead of `.iq` files:
+
+```typescript
+import { Entity, Column, Facet, DataType } from './src/core/entity';
+
+@Entity('products')
+class Product {
+  @Column({ type: DataType.Float32 })
+  @Facet('RANGE')
+  price!: number;
+
+  @Column({ type: DataType.Bool })
+  inStock!: boolean;
+
+  @Column({ type: DataType.Int8 })
+  @Facet('TERMS')
+  brandIdx!: number;
+}
+```
 
 ## Client SDK
 
@@ -147,7 +162,7 @@ import { IndexQLClient } from './src/client/indexqlClient';
 const client = IndexQLClient.load();
 
 // Query — sub-millisecond after init
-const result = client.queryProducts({
+const result = client.query({
   filter: {
     category: 'Electronics',
     priceMax: 500,
@@ -160,7 +175,7 @@ const result = client.queryProducts({
   includeFacets: true,
 });
 
-result.data;            // projected products
+result.data;            // projected entities
 result.facets;          // facets on filtered set
 result.meta.timingMs;   // ~1–2 ms warm
 ```
@@ -224,16 +239,16 @@ const [binBuf, strings, facets] = await Promise.all([
   fetch(`${BASE}/facets.json`).then(r => r.json()),
 ]);
 
-// 3. Reconstruct products using the binary decoder
-import { reconstructProducts } from './src/core/binary-encoder';
-const products = reconstructProducts(Buffer.from(binBuf), strings);
+// 3. Reconstruct entities using the binary decoder
+import { reconstructFromArrayBuffer } from './src/core/binary-encoder';
+const items = reconstructFromArrayBuffer(binBuf, strings);
 
 // Now query in-memory — same API as the local client
 ```
 
 This works identically in browsers (using the native `fetch` and `ArrayBuffer`) and in Node 18+ (using the built-in `fetch`).
 
-## Artifact Sizes (15k products)
+## Artifact Sizes (15k items)
 
 | File | Size |
 |------|------|
@@ -251,7 +266,7 @@ With gzip/brotli on the CDN, transfer size drops significantly (strings.json com
 |--------|-------|
 | Init (load + decode) | ~50 ms |
 | Warm query | 0.9–2 ms |
-| Products | 15,000 |
+| Items | 15,000 |
 | Binary size | 132 KB |
 
 Compare to a typical PostgreSQL query over HTTP: 80–300 ms per round-trip.

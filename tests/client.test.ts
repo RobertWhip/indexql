@@ -62,40 +62,40 @@ run('Query: no filter returns all items', () => {
   assertEq(r.data.length, ITEMS.length, 'data contains all items');
 });
 
-run('Query: filter by single category', () => {
-  const r = executeQuery(ITEMS, { filter: { category: 'Electronics' } });
+run('Query: filter by single category (eq)', () => {
+  const r = executeQuery(ITEMS, { filter: { category: { eq: 'Electronics' } } });
   assertEq(r.meta.total, 3, '3 Electronics items');
   assert(r.data.every(item => (item as EntityType).category === 'Electronics'), 'all results are Electronics');
 });
 
-run('Query: filter by category array', () => {
-  const r = executeQuery(ITEMS, { filter: { category: ['Electronics', 'Books'] } });
+run('Query: filter by category array (in)', () => {
+  const r = executeQuery(ITEMS, { filter: { category: { in: ['Electronics', 'Books'] } } });
   assertEq(r.meta.total, 4, '3 Electronics + 1 Books');
 });
 
-run('Query: filter by brand array', () => {
-  const r = executeQuery(ITEMS, { filter: { brand: ['Apple', 'Nike'] } });
+run('Query: filter by brand array (in)', () => {
+  const r = executeQuery(ITEMS, { filter: { brand: { in: ['Apple', 'Nike'] } } });
   assertEq(r.meta.total, 3, '2 Apple + 1 Nike');
 });
 
-run('Query: filter by price range', () => {
-  const r = executeQuery(ITEMS, { filter: { priceMin: 100, priceMax: 500 } });
+run('Query: filter by price range (gte/lte)', () => {
+  const r = executeQuery(ITEMS, { filter: { price: { gte: 100, lte: 500 } } });
   r.data.forEach(item => {
     const price = Number((item as EntityType).price);
     assert(price >= 100 && price <= 500, 'price in range');
   });
 });
 
-run('Query: filter by inStock', () => {
-  const inStock  = executeQuery(ITEMS, { filter: { inStock: true  } });
-  const outStock = executeQuery(ITEMS, { filter: { inStock: false } });
+run('Query: filter by inStock (eq boolean)', () => {
+  const inStock  = executeQuery(ITEMS, { filter: { inStock: { eq: true  } } });
+  const outStock = executeQuery(ITEMS, { filter: { inStock: { eq: false } } });
   assertEq(inStock.meta.total + outStock.meta.total, ITEMS.length, 'totals add up');
   assert(inStock.data.every( item => (item as EntityType).inStock === true),  'all in stock');
   assert(outStock.data.every(item => (item as EntityType).inStock === false), 'all out of stock');
 });
 
-run('Query: filter by rating range', () => {
-  const r = executeQuery(ITEMS, { filter: { ratingMin: 4.7 } });
+run('Query: filter by rating range (gte)', () => {
+  const r = executeQuery(ITEMS, { filter: { rating: { gte: 4.7 } } });
   r.data.forEach(item => assert(Number((item as EntityType).rating) >= 4.7, 'rating >= 4.7'));
 });
 
@@ -108,16 +108,38 @@ run('Query: full-text search (case-insensitive)', () => {
   });
 });
 
-run('Query: filter by tag', () => {
-  const r = executeQuery(ITEMS, { filter: { tags: 'shoes' } });
+run('Query: filter by tag (in)', () => {
+  const r = executeQuery(ITEMS, { filter: { tags: { in: ['shoes'] } } });
   assertEq(r.meta.total, 2, 'two items tagged "shoes"');
 });
 
 run('Query: combined filter', () => {
   const r = executeQuery(ITEMS, {
-    filter: { category: 'Electronics', inStock: true, priceMax: 500 },
+    filter: { category: { eq: 'Electronics' }, inStock: { eq: true }, price: { lte: 500 } },
   });
   assertEq(r.meta.total, 1, 'only AirPods Pro matches (in stock, <$500, Electronics)');
+});
+
+run('Query: gt/lt strict inequality', () => {
+  // price strictly > 249 and strictly < 999
+  const r = executeQuery(ITEMS, { filter: { price: { gt: 249, lt: 999 } } });
+  r.data.forEach(item => {
+    const price = Number((item as EntityType).price);
+    assert(price > 249 && price < 999, 'price in strict range');
+  });
+  assertEq(r.meta.total, 3, 'Galaxy S24 (849), Dyson V15 (749), LEGO Technic (449)');
+});
+
+run('Query: contains on a specific string field', () => {
+  const r = executeQuery(ITEMS, { filter: { description: { contains: 'flagship' } } });
+  assertEq(r.meta.total, 1, 'only Galaxy S24 has "flagship" in description');
+  assertEq((r.data[0] as EntityType).id, 'p3');
+});
+
+run('Query: eq with a number', () => {
+  const r = executeQuery(ITEMS, { filter: { price: { eq: 999 } } });
+  assertEq(r.meta.total, 1, 'only iPhone 15 costs 999');
+  assertEq((r.data[0] as EntityType).id, 'p1');
 });
 
 // ── Query: Sort ───────────────────────────────────────────────────────────────
@@ -188,7 +210,7 @@ run('Query: fields projection', () => {
 run('Query: includeFacets computes facets on filtered set', () => {
   const r = executeQuery(
     ITEMS,
-    { filter: { category: 'Electronics' }, includeFacets: true },
+    { filter: { category: { eq: 'Electronics' } }, includeFacets: true },
     { node }
   );
   assert(r.facets !== undefined, 'facets present');

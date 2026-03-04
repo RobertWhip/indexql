@@ -397,7 +397,7 @@ run('Delta: client applyDelta merges correctly', () => {
     assertEq(ids[2], 4);
 
     // Query still works
-    const qr = client.query({ filter: { priceMin: 20 } });
+    const qr = client.query({ filter: { price: { gte: 20 } } });
     assertEq(qr.meta.total, 2); // id=2 (25) and id=4 (40)
   });
 });
@@ -428,7 +428,7 @@ run('Delta: hook applyDelta re-executes query', () => {
     const client = IndexQLClient.load({ artifactsDir: dir, entity: Widget });
     const hook   = createQueryHook(client);
 
-    hook.query({ filter: { priceMin: 15 } });
+    hook.query({ filter: { price: { gte: 15 } } });
     assertEq(hook.state.data.length, 2); // id=2 (20) and id=3 (30)
 
     const packet = computeDelta(OLD_ITEMS, NEW_ITEMS, META, 'id');
@@ -440,7 +440,7 @@ run('Delta: hook applyDelta re-executes query', () => {
     assertEq(result.inserted, 1);
     assertEq(result.deleted, 1);
 
-    // Hook should have re-run query with priceMin: 15
+    // Hook should have re-run query with price >= 15
     assertEq(hook.state.data.length, 2); // id=2 (25) and id=4 (40)
   });
 });
@@ -557,14 +557,14 @@ run('Snapshot: hook applySnapshot re-runs query', () => {
     const client = IndexQLClient.load({ artifactsDir: dir, entity: Widget });
     const hook   = createQueryHook(client);
 
-    hook.query({ filter: { priceMin: 15 } });
+    hook.query({ filter: { price: { gte: 15 } } });
     assertEq(hook.state.data.length, 2); // id=2 (20) and id=3 (30)
 
     const newBuf = encodeColumns(NEW_ITEMS, META);
     const result = hook.applySnapshot(newBuf);
 
     assertEq(result.itemCount, 3);
-    // Hook should have re-run query with priceMin: 15
+    // Hook should have re-run query with price >= 15
     assertEq(hook.state.data.length, 2); // id=2 (25) and id=4 (40)
   });
 });
@@ -574,7 +574,7 @@ run('Snapshot: hook applySnapshotFromArrayBuffer re-runs query', () => {
     const client = IndexQLClient.load({ artifactsDir: dir, entity: Widget });
     const hook   = createQueryHook(client);
 
-    hook.query({ filter: { priceMin: 15 } });
+    hook.query({ filter: { price: { gte: 15 } } });
     assertEq(hook.state.data.length, 2); // id=2 (20) and id=3 (30)
 
     const newBuf = encodeColumns(NEW_ITEMS, META);

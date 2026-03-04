@@ -64,14 +64,17 @@ export type Facet = TermsFacet | RangeFacet;
 
 // ── Query Types ───────────────────────────────────────────────────────────────
 
-/**
- * Convention-based filter:
- *  - `{field}Min` / `{field}Max` → numeric range
- *  - `search` → full-text substring across all string fields
- *  - boolean value → exact match on `{key}`
- *  - string | string[] value → set-based match on `{key}`
- */
-export type QueryFilter = Record<string, unknown>;
+export interface EqOp       { eq: string | number | boolean }
+export interface ComparisonOp { gt?: number; gte?: number; lt?: number; lte?: number }
+export interface InOp        { in: (string | number)[] }
+export interface ContainsOp  { contains: string }
+
+export type FieldFilter = EqOp | ComparisonOp | InOp | ContainsOp;
+
+export type QueryFilter = {
+  search?: string;
+  [field: string]: FieldFilter | string | undefined;
+};
 
 // ── Delta Types ──────────────────────────────────────────────────────────────
 

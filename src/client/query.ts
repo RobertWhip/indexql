@@ -1,20 +1,12 @@
 import {
   Entity, Facet, SchemaNode, QueryOptions, QueryResult,
-  QueryFilter, QuerySort, QueryPagination,
+  QueryFilter, QuerySort, QueryPagination, FieldFilter,
 } from '../core/types';
 import { computeFacets }            from '../core/facet';
-import { project, toSet, matchesSet, now } from './utils';
+import { project, now } from './utils';
 
 // ── Filter ────────────────────────────────────────────────────────────────────
 
-/**
- * Convention-based generic filter engine:
- *  - Keys ending in `Min` → item[field] >= value  (strip "Min" suffix)
- *  - Keys ending in `Max` → item[field] <= value  (strip "Max" suffix)
- *  - `search` → substring match across all string-valued fields
- *  - boolean value → exact match on item[key]
- *  - string | string[] → set-based match on item[key]
- */
 function applyFilter(items: Entity[], filter: QueryFilter): Entity[] {
   const keys = Object.keys(filter);
   if (keys.length === 0) return items;
@@ -38,35 +30,46 @@ function applyFilter(items: Entity[], filter: QueryFilter): Entity[] {
         continue;
       }
 
-      // Range: *Min suffix
-      if (key.endsWith('Min')) {
-        const field = key.slice(0, -3);
-        // lowercase first char: priceMin → price
-        const fieldName = field.charAt(0).toLowerCase() + field.slice(1);
-        if (Number(item[fieldName]) < Number(filterVal)) return false;
+      const op = filterVal as FieldFilter;
+      const val = item[key];
+
+      // eq
+      if ('eq' in op) {
+        if (val !== op.eq) return false;
         continue;
       }
 
-      // Range: *Max suffix
-      if (key.endsWith('Max')) {
-        const field = key.slice(0, -3);
-        const fieldName = field.charAt(0).toLowerCase() + field.slice(1);
-        if (Number(item[fieldName]) > Number(filterVal)) return false;
+      // in
+      if ('in' in op) {
+        const set = new Set(op.in as (string | number)[]);
+        if (Array.isArray(val)) {
+          if (!val.some(v => set.has(v))) return false;
+        } else {
+          if (!set.has(val as string | number)) return false;
+        }
         continue;
       }
 
-      // Boolean exact match
-      if (typeof filterVal === 'boolean') {
-        if (item[key] !== filterVal) return false;
+      // contains
+      if ('contains' in op) {
+        const needle = op.contains.toLowerCase();
+        if (Array.isArray(val)) {
+          if (!val.some(v => typeof v === 'string' && v.toLowerCase().includes(needle))) return false;
+        } else if (typeof val === 'string') {
+          if (!val.toLowerCase().includes(needle)) return false;
+        } else {
+          return false;
+        }
         continue;
       }
 
-      // String / string[] set-based match
-      if (typeof filterVal === 'string' || Array.isArray(filterVal)) {
-        const filterSet = toSet(filterVal as string | string[]);
-        if (filterSet && !matchesSet(item[key] as string | string[], filterSet)) return false;
-        continue;
-      }
+      // comparison: gt/gte/lt/lte
+      const num = Number(val);
+      const cmp = op as { gt?: number; gte?: number; lt?: number; lte?: number };
+      if (cmp.gt  !== undefined && !(num >  cmp.gt))  return false;
+      if (cmp.gte !== undefined && !(num >= cmp.gte)) return false;
+      if (cmp.lt  !== undefined && !(num <  cmp.lt))  return false;
+      if (cmp.lte !== undefined && !(num <= cmp.lte)) return false;
     }
     return true;
   });

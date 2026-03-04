@@ -1,0 +1,11 @@
+{
+  "name": "indexql-demos",
+  "private": true,
+  "scripts": {
+    "sync:static": "npm --prefix sync-modes run static",
+    "sync:snapshot": "npm --prefix sync-modes run snapshot",
+    "sync:incremental": "npm --prefix sync-modes run incremental",
+    "sync:manual": "npm --prefix sync-modes run manual",
+    "catalog": "npm --prefix product-catalog run dev"
+  }
+}

@@ -1,5 +1,5 @@
 import { encodeColumns, reconstructFromArrayBuffer, type ColumnMeta } from './binary-encoder';
-import type { Entity as EntityType, SchemaNode, SchemaField } from './types';
+import type { Entity as EntityType, SchemaNode, SchemaField, SyncMode } from './types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,6 +22,7 @@ export interface ColumnDef {
   bits:        number | null;
   isBinary:    boolean;
   isList?:     boolean;
+  isKey?:      boolean;
   facet?:      FacetKind;
 }
 
@@ -43,10 +44,47 @@ const BINARY_TYPES: Record<string, number> = {
   Float64: 64,
 };
 
+/** Load once at startup, no background polling. Default when `@Sync` is omitted. */
+export interface SyncStatic {
+  mode: 'static';
+}
+
+/** Poll at `pollMs` intervals, always fetching a full snapshot (no delta logic). */
+export interface SyncSnapshot {
+  mode: 'snapshot';
+  /** Poll interval in milliseconds. */
+  pollMs: number;
+}
+
+/**
+ * Poll at `pollMs` intervals. Uses deltas for small gaps (≤ `snapshotEvery`)
+ * and falls back to a full snapshot for larger gaps.
+ */
+export interface SyncIncremental {
+  mode: 'incremental';
+  /** Poll interval in milliseconds. */
+  pollMs: number;
+  /** After this many missed ticks, force a full snapshot instead of deltas. */
+  snapshotEvery?: number;
+}
+
+/** No auto-poll. The client exposes a manual refresh action. */
+export interface SyncManual {
+  mode: 'manual';
+}
+
+/**
+ * Entity-level sync strategy, attached via the `@Sync` decorator.
+ * Discriminated union on `mode` — TypeScript enforces which fields are
+ * allowed/required per mode at compile time.
+ */
+export type SyncConfig = SyncStatic | SyncSnapshot | SyncIncremental | SyncManual;
+
 // ── Metadata keys ─────────────────────────────────────────────────────────────
 
 const COLLECTION_KEY = Symbol('entity:collection');
 const COLUMNS_KEY    = Symbol('entity:columns');
+const SYNC_KEY       = Symbol('entity:sync');
 
 // ── Decorators ────────────────────────────────────────────────────────────────
 
@@ -74,8 +112,8 @@ function getColumnMap(proto: object): Map<string, ColumnDef> {
  * Property decorator: registers a field with its IQ type.
  * Usage: @Column('Float32')
  */
-export function Column(options: { type: DataType, isArray?: boolean }): PropertyDecorator {
-  const { type, isArray } = options;
+export function Column(options: { type: DataType, isArray?: boolean, isKey?: boolean }): PropertyDecorator {
+  const { type, isArray, isKey } = options;
   return (target, propertyKey) => {
     const key  = String(propertyKey);
     const map  = getColumnMap(target);
@@ -89,8 +127,9 @@ export function Column(options: { type: DataType, isArray?: boolean }): Property
       existing.bits     = bits;
       existing.isBinary = isBinary;
       existing.isList   = !!isArray;
+      if (isKey) existing.isKey = true;
     } else {
-      map.set(key, { propertyKey: key, type, bits, isBinary, isList: !!isArray });
+      map.set(key, { propertyKey: key, type, bits, isBinary, isList: !!isArray, isKey: !!isKey });
     }
   };
 }
@@ -180,4 +219,44 @@ export function toSchemaNode(schema: EntitySchema): SchemaNode {
       : [],
   }));
   return { typeName: schema.collection, collection: schema.collection, fields };
+}
+
+// ── Sync decorator ───────────────────────────────────────────────────────────
+
+/**
+ * Class decorator: attaches sync configuration to an entity.
+ *
+ * @example
+ * @Sync({ mode: 'incremental', pollMs: 2000, snapshotEvery: 15 })
+ * @Sync({ mode: 'snapshot', pollMs: 5000 })
+ * @Sync({ mode: 'static' })
+ * @Sync({ mode: 'manual' })
+ */
+export function Sync(config: SyncConfig): ClassDecorator {
+  return (target) => {
+    Reflect.defineProperty(target, SYNC_KEY, { value: config, enumerable: false });
+  };
+}
+
+const DEFAULT_SYNC: SyncStatic = { mode: 'static' };
+
+/**
+ * Extract SyncConfig from a decorated class. Returns { mode: 'static' } if no @Sync.
+ */
+export function getSyncConfig(cls: Function): SyncConfig {
+  const config = (cls as unknown as Record<symbol, unknown>)[SYNC_KEY] as SyncConfig | undefined;
+  return config ?? DEFAULT_SYNC;
+}
+
+// ── Key column ───────────────────────────────────────────────────────────────
+
+/**
+ * Find the single key column. Throws if zero, multiple, or non-binary key.
+ */
+export function getKeyColumn(schema: EntitySchema): ColumnDef {
+  const keys = schema.columns.filter(c => c.isKey);
+  if (keys.length === 0) throw new Error('No @Column with isKey defined');
+  if (keys.length > 1)   throw new Error(`Multiple key columns: ${keys.map(k => k.propertyKey).join(', ')}`);
+  if (!keys[0].isBinary)  throw new Error(`Key column "${keys[0].propertyKey}" must be a binary (numeric) type`);
+  return keys[0];
 }

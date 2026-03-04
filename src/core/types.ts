@@ -73,6 +73,24 @@ export type Facet = TermsFacet | RangeFacet;
  */
 export type QueryFilter = Record<string, unknown>;
 
+// ── Delta Types ──────────────────────────────────────────────────────────────
+
+export interface DeltaApplyResult {
+  inserted: number;
+  updated: number;
+  deleted: number;
+  totalAfter: number;
+  timingMs: number;
+}
+
+export interface SnapshotApplyResult {
+  itemCount: number;
+  previousCount: number;
+  timingMs: number;
+}
+
+export type SyncMode = 'static' | 'snapshot' | 'incremental' | 'manual';
+
 export type SortField = string;
 export type SortOrder = 'asc' | 'desc';
 

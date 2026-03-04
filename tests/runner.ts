@@ -39,6 +39,8 @@ async function runAll(): Promise<void> {
   // Import test files to populate the registry
   require('./core.test');
   require('./client.test');
+  require('./delta.test');
+  require('./sync.test');
 
   console.log();
   console.log(`${BOLD}${CYAN}IndexQL Test Suite${RESET}`);

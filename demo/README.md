@@ -2,9 +2,34 @@
 
 ## Demo Apps
 
-| Demo | Description |
-|------|-------------|
-| [product-catalog](./product-catalog/) | Full-stack e-commerce catalog. PostgreSQL seeds 80k products, Express builds binary artifacts per subcategory on demand, React client decodes and queries locally with faceted filtering. |
+| Demo | Description | Run |
+|------|-------------|-----|
+| [sync-modes](./sync-modes/) | Four sync mode demos: static, snapshot, incremental, manual. Mock server generates 10k items and mutates every 2s. React client visualizes the sync strategy. | `npm run sync:static` etc. |
+| [product-catalog](./product-catalog/) | Full-stack e-commerce catalog. PostgreSQL seeds 80k products, Express builds binary artifacts per subcategory on demand, React client decodes and queries locally with faceted filtering. | See its README |
+
+## Quick Start
+
+```bash
+cd demo
+
+# Run any sync mode demo (pick one):
+npm run sync:static        # Load once, no updates
+npm run sync:snapshot      # Poll, full snapshot each tick
+npm run sync:incremental   # Poll, deltas + snapshot fallback
+npm run sync:manual        # No auto-poll, refresh button
+
+# Or run the full-stack product catalog:
+npm run catalog
+```
+
+### Sync Modes at a Glance
+
+| Mode | Server port | Client port | `@Sync` decorator | What it demonstrates |
+|------|-------------|-------------|-------------------|---------------------|
+| static | 3010 | 5010 | `{ mode: 'static' }` | Load snapshot once, zero polling overhead |
+| snapshot | 3011 | 5011 | `{ mode: 'snapshot', pollMs: 2000 }` | Poll + always fetch full snapshot |
+| incremental | 3012 | 5012 | `{ mode: 'incremental', pollMs: 2000, snapshotEvery: 15 }` | Poll + deltas for small gaps, snapshot for large gaps |
+| manual | 3013 | 5013 | `{ mode: 'manual' }` | No auto-poll, user clicks Refresh |
 
 ## Use Case Ideas
 

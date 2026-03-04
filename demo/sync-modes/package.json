@@ -1,0 +1,28 @@
+{
+  "name": "sync-modes-demo",
+  "private": true,
+  "scripts": {
+    "static": "concurrently \"ts-node static/server.ts\" \"vite --config static/vite.config.ts\"",
+    "snapshot": "concurrently \"ts-node snapshot/server.ts\" \"vite --config snapshot/vite.config.ts\"",
+    "incremental": "concurrently \"ts-node incremental/server.ts\" \"vite --config incremental/vite.config.ts\"",
+    "manual": "concurrently \"ts-node manual/server.ts\" \"vite --config manual/vite.config.ts\""
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.10"
+  }
+}

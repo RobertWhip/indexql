@@ -1,5 +1,5 @@
 import { IndexQLClient } from './indexqlClient';
-import { QueryOptions, QueryResult, Entity, Facet } from '../core/types';
+import { QueryOptions, QueryResult, Entity, Facet, DeltaApplyResult, SnapshotApplyResult } from '../core/types';
 
 // ── State Shape ───────────────────────────────────────────────────────────────
 
@@ -20,6 +20,14 @@ export interface QueryHook {
   state: QueryState;
   /** Execute a query and update state */
   query(options?: QueryOptions): void;
+  /** Apply a delta buffer and re-run the last query */
+  applyDelta(buf: Buffer): DeltaApplyResult;
+  /** Apply a delta from ArrayBuffer and re-run the last query */
+  applyDeltaFromArrayBuffer(ab: ArrayBuffer): DeltaApplyResult;
+  /** Apply a full snapshot buffer and re-run the last query */
+  applySnapshot(buf: Buffer): SnapshotApplyResult;
+  /** Apply a full snapshot from ArrayBuffer and re-run the last query */
+  applySnapshotFromArrayBuffer(ab: ArrayBuffer): SnapshotApplyResult;
   /** Reset state to initial empty values */
   reset(): void;
   /** Subscribe to state changes; returns unsubscribe fn */
@@ -56,6 +64,17 @@ export function createQueryHook(client: IndexQLClient): QueryHook {
     notify();
   }
 
+  function rerunLastQuery(): void {
+    if (state.lastOptions) {
+      const qr = client.query({ includeFacets: true, ...state.lastOptions });
+      setState({
+        data:   qr.data,
+        facets: qr.facets ?? [],
+        meta:   qr.meta,
+      });
+    }
+  }
+
   return {
     get state() { return state; },
 
@@ -72,6 +91,30 @@ export function createQueryHook(client: IndexQLClient): QueryHook {
       } catch (err) {
         setState({ loading: false, error: err instanceof Error ? err.message : String(err) });
       }
+    },
+
+    applyDelta(buf: Buffer): DeltaApplyResult {
+      const result = client.applyDelta(buf);
+      rerunLastQuery();
+      return result;
+    },
+
+    applyDeltaFromArrayBuffer(ab: ArrayBuffer): DeltaApplyResult {
+      const result = client.applyDeltaFromArrayBuffer(ab);
+      rerunLastQuery();
+      return result;
+    },
+
+    applySnapshot(buf: Buffer): SnapshotApplyResult {
+      const result = client.applySnapshot(buf);
+      rerunLastQuery();
+      return result;
+    },
+
+    applySnapshotFromArrayBuffer(ab: ArrayBuffer): SnapshotApplyResult {
+      const result = client.applySnapshotFromArrayBuffer(ab);
+      rerunLastQuery();
+      return result;
     },
 
     reset(): void {
